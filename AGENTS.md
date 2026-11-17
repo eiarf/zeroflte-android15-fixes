@@ -72,10 +72,11 @@ Always reference and branch from these forked repositories:
 * **The Failure Mode**: `powerhint.json` must be strictly valid JSON. If PowerHAL crashes or is missing:
   - Exynos 7420 defaults to energy-saving floors: Mali GPU drops to 260 MHz, Little cluster drops to 400 MHz.
   - Result: Severe 10-15 FPS stutters, slow app launch, and input latency.
-* **Correct Procedure**: Maintain the tuned floors:
+* **Correct Procedure**: Maintain the tuned floors and governors:
+  - Governors: `schedutil` on all CPU policies (`policy0` & `policy1`).
   - GPU: `420000000` (420 MHz) minimum floor in `vendor.postboot`.
-  - Little Cluster: `600000` (600 MHz).
-  - Big Cluster: `1000000` (1.0 GHz).
+  - Little Cluster (`policy0`): `700000` (700 MHz) floor, `1500000` (1.5 GHz) max.
+  - Big Cluster (`policy1`): `1000000` (1.0 GHz) floor, `2100000` (2.1 GHz) max.
   - UCLAMP top-app boost: `15.00` on touch / interaction.
 
 ### ⚠️ Rule 4: ALWAYS Enforce 2GB ZRAM Swap
@@ -87,6 +88,11 @@ Always reference and branch from these forked repositories:
 * **The Context**: The proprietary Samsung Camera HAL (`camera.samsungexynos7420.so`) is a legacy 32/64-bit HAL1/HAL3 blob that communicates directly with Samsung's out-of-tree FIMC-IS driver ioctls.
 * **The Failure Mode**: Mainline Kernel 6.6 uses modern Linux V4L2 and Media Controller subsystems. Simply copying proprietary camera blobs from stock Nougat/Oreo ROMs will crash `cameraserver` immediately.
 * **Correct Procedure**: Camera support must be implemented either through `libcamera` with a custom Exynos 7420 pipeline handler or an open-source V4L2 AIDL camera provider wrapper.
+
+### ⚠️ Rule 6: Display Resolution & Density Scaling (FHD 1080p vs Native QHD 1440p)
+* **The Context**: Native Galaxy S6 display is 1440x2560 (3.7M pixels). The Mali-T760 MP8 struggles on Android 15 with software DRM/Mesa composition pushing this pixel load.
+* **Correct Procedure**: Use display downscaling to FHD (1080x1920 @ 420 dpi) which cuts GPU render workload by ~45%, delivering buttery smooth 60 FPS transitions.
+* **Control Script**: `/vendor/bin/set_resolution.sh [fhd|native|hd]` (controls `persist.vendor.display.resolution`). Default on boot is `fhd` (1080x1920 @ 420dpi). Switch to native QHD at any time via `set_resolution.sh native`.
 
 ---
 
