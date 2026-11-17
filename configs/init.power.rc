@@ -10,6 +10,12 @@ on boot
     chmod 0664 /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq
     chmod 0664 /sys/devices/system/cpu/cpufreq/policy1/scaling_min_freq
 
+    # schedutil re-evaluates the frequency at most every 10 ms. From 6.18
+    # the kernel derives the default from cpufreq-dt's 500 us transition
+    # latency as 750 us, and the sugov deadline threads then preempt the
+    # app's UI and render threads. 10 ms is what 6.6 used.
+    write /sys/devices/system/cpu/cpufreq/schedutil/rate_limit_us 10000
+
     # Top-app utilisation clamp for the power HAL's touch and launch boosts.
     chown system system /dev/cpuctl/top-app/cpu.uclamp.min
     chmod 0664 /dev/cpuctl/top-app/cpu.uclamp.min
