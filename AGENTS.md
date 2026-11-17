@@ -111,6 +111,14 @@ Always reference and branch from these forked repositories:
   - `configs/init.samsungexynos7420.rc` (`on early-init`) runs `vendor_modprobe` on audio (`arizona-micsupp`, `madera*`, `snd-soc-cs47l85`, `snd-soc-i2s`, `snd-soc-max98925`, `snd-soc-zero-wm1840`) and BT (`bluetooth`, `btbcm`, `hci_uart`, `rfcomm`, `hidp`).
   - `/vendor/firmware/brcm/` must contain `brcmfmac4358-pcie.{samsung,zeroflte.,}{bin,txt}` (from `/vendor/etc/wifi/bcmdhd_sta.bin` & `nvram_net.txt`) and `BCM4358A3.{samsung,zeroflte.,}hcd` (from `/vendor/firmware/bcm4358A3_V0083.0138.hcd`) labeled `u:object_r:vendor_firmware_file:s0` (automated in `scripts/apply_brcm_firmware.sh`).
 
+### ⚠️ Rule 9: Wi-Fi HAL Compatibility Overlays & MAX77843 MUIC Wakeup Sepolicy
+* **The Failure Mode**:
+  1. AOSP 15 Wi-Fi framework repeatedly invokes `setBtCoexistenceScanModeEnabled`, `setSuspendModeEnabled`, and roaming mode on `ISupplicantStaIface`/`IWifiStaIface`. The BCM4358 `bcmdhd`/`brcmfmac` driver and legacy supplicant reject these calls (`ServiceSpecificException` code 1 / 4), causing 800+ error logs per session.
+  2. The MAX77843 micro-USB MUIC wakeup node (`/devices/platform/i2c-max77843/i2c-3/3-0066/max77843-muic/wakeup/wakeup1`) defaults to generic `sysfs`, which blocks `system_suspend` daemon (`Permission denied` on `wakeup1`).
+* **Correct Procedure**:
+  - In `rro_overlays/WifiOverlay/res/values/config.xml`: explicitly set `config_wifiSuspendOptimizationsEnabled=false`, `config_wifiUseHalApiToDisableFwRoaming=false`, `config_wifiDisableFirmwareRoamingInIdleMode=true`, `config_wifiDefaultCoexAlgorithmEnabled=false`, and `config_wifi_connected_mac_randomization_supported=false`. At runtime, set `settings put global wifi_suspend_optimizations_enabled 0`.
+  - In `sepolicy/vendor/genfs_contexts`: add `genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-muic/wakeup u:object_r:sysfs_wakeup:s0`.
+
 ---
 
 ## 5. Diagnostic & Quick Runbook for AI Agents
