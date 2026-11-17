@@ -8,6 +8,8 @@ import /vendor/etc/init/hw/init.battery.rc
 on early-init
     # Lengthen watchdog autorecovery timeout to 900 seconds (15 minutes) for early boot
     write /sys/module/dsh_esslog/parameters/autorecovery 900
+    # Load NK 6.6 audio (wm1840/cs47l85/madera) & bluetooth modules before HALs start
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules arizona-micsupp madera madera-spi pinctrl-madera irq-madera gpio-madera snd-soc-cs47l85 snd-soc-i2s snd-soc-max98925 snd-soc-zero-wm1840 bluetooth btbcm hci_uart rfcomm hidp
     # ZRAM setup; vendor/nk's nk-modules.rc loads zram and sets lz4.
     write /proc/sys/vm/page-cluster 0
     write /proc/sys/vm/swappiness 100

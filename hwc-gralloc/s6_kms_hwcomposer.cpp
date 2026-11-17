@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -22,9 +23,13 @@
 #include <hardware/gralloc.h>
 #include <hardware/hardware.h>
 #include <hardware/hwcomposer.h>
+#include <drm/drm.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
+
+#define S6_GRALLOC_MAGIC 0x3141592
+#define HWC_FB_CACHE_SIZE 16
 
 struct private_handle_t {
     struct native_handle nativeHandle;
@@ -49,6 +54,15 @@ struct dumb_buf {
     void *vaddr;
 };
 
+struct hwc_fb_cache_entry {
+    uint32_t gem_handle;
+    uint32_t fb_id;
+    int width;
+    int height;
+    int stride;
+    uint64_t last_used;
+};
+
 struct s6_hwc_device {
     hwc_composer_device_1_t base;
     int drm_fd;
@@ -59,6 +73,13 @@ struct s6_hwc_device {
     struct dumb_buf bufs[2];
     int current_buf;
     int has_drm;
+
+    struct hwc_fb_cache_entry fb_cache[HWC_FB_CACHE_SIZE];
+    uint64_t use_seq;
+    uint32_t current_fb_id;
+    uint32_t prev_fb_id;
+    int zc_logged;
+    int zc_failed_logged;
 
     const gralloc_module_t *gralloc;
 
@@ -72,21 +93,148 @@ static void *vsync_thread_func(void *arg) {
     struct s6_hwc_device *dev = (struct s6_hwc_device *)arg;
     const uint64_t period_ns = 16666666ULL; // ~60 Hz
 
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t next_ns = (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+
     while (dev->vsync_running) {
-        struct timespec ts;
+        next_ns += period_ns;
+        struct timespec req = { (time_t)(next_ns / 1000000000ULL), (long)(next_ns % 1000000000ULL) };
+        while (dev->vsync_running && clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &req, NULL) == EINTR) {
+        }
+
+        // Re-sync if timer fell behind by more than 2 periods (e.g. suspend/resume)
         clock_gettime(CLOCK_MONOTONIC, &ts);
         uint64_t now_ns = (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-        uint64_t next_ns = ((now_ns / period_ns) + 1) * period_ns;
-        uint64_t sleep_ns = next_ns - now_ns;
-
-        struct timespec req = { (time_t)(sleep_ns / 1000000000ULL), (long)(sleep_ns % 1000000000ULL) };
-        nanosleep(&req, NULL);
+        if (now_ns > next_ns + 2 * period_ns) {
+            next_ns = now_ns;
+        }
 
         if (dev->vsync_enabled && dev->procs && dev->procs->vsync) {
             dev->procs->vsync(dev->procs, 0, next_ns);
         }
     }
     return NULL;
+}
+
+static void close_gem_handle(int drm_fd, uint32_t handle) {
+    if (!handle)
+        return;
+    struct drm_gem_close creq;
+    memset(&creq, 0, sizeof(creq));
+    creq.handle = handle;
+    ioctl(drm_fd, DRM_IOCTL_GEM_CLOSE, &creq);
+}
+
+static void release_fb_slot(int drm_fd, struct hwc_fb_cache_entry *slot) {
+    if (slot->fb_id) {
+        drmModeRmFB(drm_fd, slot->fb_id);
+    }
+    if (slot->gem_handle) {
+        close_gem_handle(drm_fd, slot->gem_handle);
+    }
+    memset(slot, 0, sizeof(*slot));
+}
+
+/*
+ * Import a gralloc DMA-BUF PRIME FD directly into exynos-drm as a scanout FB.
+ * Keying the cache by gem_handle (which the kernel keeps unique per dma_buf
+ * within dev->drm_fd) avoids fd-number/inode reuse hazards and keeps scanout
+ * FBs alive while they remain active on CRTC.
+ */
+static uint32_t s6_hwc_get_or_import_fb(struct s6_hwc_device *dev, const struct private_handle_t *hnd) {
+    if (!hnd || hnd->magic != S6_GRALLOC_MAGIC || hnd->fd < 0)
+        return 0;
+
+    if (hnd->width != (int)dev->mode.hdisplay || hnd->height != (int)dev->mode.vdisplay || hnd->stride < hnd->width)
+        return 0;
+
+    // Only direct-scanout 32bpp formats match drmModeAddFB(depth=24, bpp=32)
+    if (hnd->format != HAL_PIXEL_FORMAT_RGBA_8888 &&
+        hnd->format != HAL_PIXEL_FORMAT_RGBX_8888 &&
+        hnd->format != HAL_PIXEL_FORMAT_BGRA_8888)
+        return 0;
+
+    uint32_t gem_handle = 0;
+    if (drmPrimeFDToHandle(dev->drm_fd, hnd->fd, &gem_handle) != 0 || gem_handle == 0) {
+        if (!dev->zc_failed_logged) {
+            ALOGW("drmPrimeFDToHandle failed (%s), falling back to memcpy", strerror(errno));
+            dev->zc_failed_logged = 1;
+        }
+        return 0;
+    }
+
+    struct hwc_fb_cache_entry *empty_slot = NULL;
+    struct hwc_fb_cache_entry *lru_slot = NULL;
+    for (int i = 0; i < HWC_FB_CACHE_SIZE; i++) {
+        struct hwc_fb_cache_entry *e = &dev->fb_cache[i];
+        if (e->fb_id && e->gem_handle == gem_handle) {
+            if (e->width == hnd->width && e->height == hnd->height && e->stride == hnd->stride) {
+                e->last_used = ++dev->use_seq;
+                return e->fb_id;
+            }
+            // Same underlying GEM buffer reused with different geometry: recreate FB only.
+            drmModeRmFB(dev->drm_fd, e->fb_id);
+            e->fb_id = 0;
+            empty_slot = e;
+            break;
+        }
+        if (!e->fb_id && !empty_slot) {
+            empty_slot = e;
+        } else if (e->fb_id && e->fb_id != dev->current_fb_id && e->fb_id != dev->prev_fb_id) {
+            if (!lru_slot || e->last_used < lru_slot->last_used) {
+                lru_slot = e;
+            }
+        }
+    }
+
+    struct hwc_fb_cache_entry *target = empty_slot ? empty_slot : lru_slot;
+    if (!target) {
+        // Every slot is somehow pinned; fail safely without closing gem_handle if already cached.
+        return 0;
+    }
+
+    int owns_new_handle = (target->gem_handle != gem_handle);
+    if (target->fb_id) {
+        release_fb_slot(dev->drm_fd, target);
+    }
+
+    uint32_t fb_id = 0;
+    uint32_t pitch = (uint32_t)hnd->stride * 4U;
+    if (drmModeAddFB(dev->drm_fd, (uint32_t)hnd->width, (uint32_t)hnd->height, 24, 32, pitch, gem_handle, &fb_id) != 0 || fb_id == 0) {
+        if (!dev->zc_failed_logged) {
+            ALOGW("Zero-copy drmModeAddFB failed (%s, pitch=%u), falling back to memcpy", strerror(errno), pitch);
+            dev->zc_failed_logged = 1;
+        }
+        if (owns_new_handle) {
+            close_gem_handle(dev->drm_fd, gem_handle);
+        } else {
+            target->gem_handle = 0;
+        }
+        return 0;
+    }
+
+    target->gem_handle = gem_handle;
+    target->fb_id = fb_id;
+    target->width = hnd->width;
+    target->height = hnd->height;
+    target->stride = hnd->stride;
+    target->last_used = ++dev->use_seq;
+
+    if (!dev->zc_logged) {
+        ALOGI("Zero-copy DRM PRIME scanout active (%dx%d stride=%d fb_id=%u)", hnd->width, hnd->height, hnd->stride, fb_id);
+        dev->zc_logged = 1;
+    }
+    return fb_id;
+}
+
+static int s6_drm_page_flip(struct s6_hwc_device *dev, uint32_t fb_id) {
+    int ret = drmModePageFlip(dev->drm_fd, dev->crtc_id, fb_id, 0, NULL);
+    for (int retry = 0; retry < 12 && (ret == -EBUSY || (ret < 0 && errno == EBUSY)); retry++) {
+        usleep(1500);
+        ret = drmModePageFlip(dev->drm_fd, dev->crtc_id, fb_id, 0, NULL);
+    }
+    return ret;
 }
 
 static int s6_hwc_prepare(hwc_composer_device_1_t *dev, size_t numDisplays, hwc_display_contents_1_t **displays) {
@@ -119,8 +267,33 @@ static int s6_hwc_set(hwc_composer_device_1_t *base_dev, size_t numDisplays, hwc
         }
     }
 
-    if (fb_layer && fb_layer->handle && dev->has_drm && dev->gralloc) {
-        struct private_handle_t *hnd = (struct private_handle_t *)fb_layer->handle;
+    // Wait for GPU/RenderEngine to finish writing before scanout
+    if (fb_layer && fb_layer->acquireFenceFd >= 0) {
+        struct pollfd pfd = { fb_layer->acquireFenceFd, POLLIN, 0 };
+        poll(&pfd, 1, 200);
+        close(fb_layer->acquireFenceFd);
+        fb_layer->acquireFenceFd = -1;
+    }
+
+    int flipped = 0;
+    if (fb_layer && fb_layer->handle && dev->has_drm) {
+        const struct private_handle_t *hnd = (const struct private_handle_t *)fb_layer->handle;
+        uint32_t zc_fb_id = s6_hwc_get_or_import_fb(dev, hnd);
+        if (zc_fb_id) {
+            int ret = s6_drm_page_flip(dev, zc_fb_id);
+            if (ret == 0) {
+                dev->prev_fb_id = dev->current_fb_id;
+                dev->current_fb_id = zc_fb_id;
+                flipped = 1;
+            } else if (!dev->zc_failed_logged) {
+                ALOGW("Zero-copy drmModePageFlip failed (%d: %s), falling back to memcpy", ret, strerror(errno));
+                dev->zc_failed_logged = 1;
+            }
+        }
+    }
+
+    if (!flipped && fb_layer && fb_layer->handle && dev->has_drm && dev->gralloc) {
+        const struct private_handle_t *hnd = (const struct private_handle_t *)fb_layer->handle;
         void *vaddr = NULL;
         int err = dev->gralloc->lock(dev->gralloc, fb_layer->handle,
                                      GRALLOC_USAGE_SW_READ_OFTEN,
@@ -134,7 +307,10 @@ static int s6_hwc_set(hwc_composer_device_1_t *base_dev, size_t numDisplays, hwc
                     copy_size = (size_t)hnd->size;
                 }
                 memcpy(buf->vaddr, vaddr, copy_size);
-                drmModePageFlip(dev->drm_fd, dev->crtc_id, buf->fb_id, 0, NULL);
+                if (s6_drm_page_flip(dev, buf->fb_id) == 0) {
+                    dev->prev_fb_id = dev->current_fb_id;
+                    dev->current_fb_id = buf->fb_id;
+                }
                 dev->current_buf ^= 1;
             }
             dev->gralloc->unlock(dev->gralloc, fb_layer->handle);
@@ -265,6 +441,9 @@ static int s6_hwc_close(hw_device_t *dev) {
         s6dev->vsync_running = 0;
         pthread_join(s6dev->vsync_thread, NULL);
         if (s6dev->has_drm && s6dev->drm_fd >= 0) {
+            for (int i = 0; i < HWC_FB_CACHE_SIZE; i++) {
+                release_fb_slot(s6dev->drm_fd, &s6dev->fb_cache[i]);
+            }
             for (int i = 0; i < 2; i++) {
                 if (s6dev->bufs[i].vaddr)
                     munmap(s6dev->bufs[i].vaddr, s6dev->bufs[i].size);
@@ -372,6 +551,9 @@ static int init_drm(struct s6_hwc_device *dev) {
 
     if (dev->bufs[0].fb_id) {
         int ret = drmModeSetCrtc(fd, dev->crtc_id, dev->bufs[0].fb_id, 0, 0, &dev->connector_id, 1, &dev->mode);
+        if (ret == 0) {
+            dev->current_fb_id = dev->bufs[0].fb_id;
+        }
         ALOGI("drmModeSetCrtc returned %d", ret);
     }
 

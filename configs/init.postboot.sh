@@ -45,24 +45,25 @@ if [ -f /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq ]; then
     echo 1500000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
 fi
 
-# Big cluster (Cortex-A57: cpu1-4) -> 1000 MHz floor, 2.1 GHz max
+# Big cluster (Cortex-A57: cpu1-4) -> 1000 MHz floor, 1.8 GHz max
 if [ -f /sys/devices/system/cpu/cpufreq/policy1/scaling_min_freq ]; then
     echo 1000000 > /sys/devices/system/cpu/cpufreq/policy1/scaling_min_freq
 fi
 if [ -f /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq ]; then
-    echo 2100000 > /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq
+    echo 1800000 > /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq
 fi
 
 # 5. Display Resolution & Density Scaling (FHD 1080x1920 @ 420 dpi vs Native QHD 1440x2560)
 # Downscaling cuts GPU rendering load by ~45% for dramatically smoother 60 FPS UI on Mali-T760 MP8
 RES_MODE=$(getprop persist.vendor.display.resolution)
-if [ "$RES_MODE" = "native" ] || [ "$RES_MODE" = "qhd" ]; then
-    wm size reset
-    wm density reset
-else
-    wm size 1080x1920
-    wm density 420
-fi
+for attempt in 1 2 3 4 5; do
+    if [ "$RES_MODE" = "native" ] || [ "$RES_MODE" = "qhd" ]; then
+        wm size reset >/dev/null 2>&1 && wm density reset >/dev/null 2>&1 && break
+    else
+        wm size 1080x1920 >/dev/null 2>&1 && wm density 420 >/dev/null 2>&1 && break
+    fi
+    sleep 2
+done
 
 # 6. UI Animations & Responsiveness
 settings put global window_animation_scale 0.75

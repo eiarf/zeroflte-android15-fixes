@@ -1,0 +1,121 @@
+{
+  "Profiles": [
+    {
+      "Name": "SFMainPolicy",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "top-app"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "SFRenderEnginePolicy",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "top-app"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "SCHED_QOS_SENSITIVE_STANDARD_SET",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "top-app"
+          }
+        },
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpu",
+            "Path": "top-app"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "SCHED_QOS_SENSITIVE_STANDARD_CLEAR",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "foreground"
+          }
+        },
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpu",
+            "Path": "foreground"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "SCHED_QOS_SENSITIVE_EXTREME_SET",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "top-app"
+          }
+        },
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpu",
+            "Path": "top-app"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "SCHED_QOS_SENSITIVE_EXTREME_CLEAR",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "foreground"
+          }
+        },
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpu",
+            "Path": "foreground"
+          }
+        }
+      ]
+    }
+  ],
+
+  "AggregateProfiles": [
+    {
+      "Name": "Dex2OatBootComplete",
+      "Profiles": [ "SCHED_SP_BACKGROUND" ]
+    }
+  ]
+}
