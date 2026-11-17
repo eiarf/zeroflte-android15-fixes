@@ -154,35 +154,54 @@ static int gralloc_unlock(gralloc_module_t const* /*module*/, buffer_handle_t ha
 }
 
 static int gralloc_lock_ycbcr(gralloc_module_t const* /*module*/,
-                       buffer_handle_t handle, int /*usage*/,
+                       buffer_handle_t handle, int usage,
                        int /*l*/, int /*t*/, int w, int h,
                        struct android_ycbcr *ycbcr) {
     if (private_handle_t::validate(handle) < 0 || !ycbcr)
         return -EINVAL;
 
     private_handle_t* hnd = (private_handle_t*)handle;
-    if (!hnd->base || hnd->pid != getpid()) {
-        void *vaddr = NULL;
-        int err = gralloc_map(handle, &vaddr);
-        if (err) return err;
+    int sw_access = (usage & (GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK)) != 0;
+    uintptr_t base = 0;
+
+    if (sw_access) {
+        if (!hnd->base || hnd->pid != getpid()) {
+            void *vaddr = NULL;
+            int err = gralloc_map(handle, &vaddr);
+            if (err) return err;
+        }
+        base = (uintptr_t)hnd->base;
     }
 
-    uint8_t *base = (uint8_t *)hnd->base;
-    int ystride = hnd->stride ? hnd->stride : w;
-    int cstride = ystride / 2;
+    int width = (hnd->width > 0) ? hnd->width : w;
+    int height = (hnd->height > 0) ? hnd->height : h;
+    int ystride = hnd->stride ? hnd->stride : width;
 
-    ycbcr->y = base;
+    memset(ycbcr, 0, sizeof(*ycbcr));
+    ycbcr->y = (void *)base;
     ycbcr->ystride = ystride;
 
     if (hnd->format == HAL_PIXEL_FORMAT_YV12) {
-        ycbcr->cr = (void*)(base + ystride * h);
-        ycbcr->cb = (void*)((uint8_t*)ycbcr->cr + cstride * (h / 2));
+        // Android YV12 requires 16-byte aligned chroma stride; alloc ensures ystride is 32-aligned
+        int cstride = ((ystride / 2) + 15) & ~15;
+        if (cstride * 2 > ystride)
+            cstride = ystride / 2;
+        uintptr_t cr_off = base + (size_t)ystride * height;
+        ycbcr->cr = (void *)cr_off;
+        ycbcr->cb = (void *)(cr_off + (size_t)cstride * (height / 2));
         ycbcr->cstride = cstride;
         ycbcr->chroma_step = 1;
+    } else if (hnd->format == HAL_PIXEL_FORMAT_YCrCb_420_SP) {
+        uintptr_t cr_off = base + (size_t)ystride * height;
+        ycbcr->cr = (void *)cr_off;
+        ycbcr->cb = (void *)(cr_off + 1);
+        ycbcr->cstride = ystride;
+        ycbcr->chroma_step = 2;
     } else {
-        // NV12 / NV21 / default semiplanar
-        ycbcr->cb = (void*)(base + ystride * h);
-        ycbcr->cr = (void*)((uint8_t*)ycbcr->cb + 1);
+        // YCbCr_420_888 / NV12 semiplanar
+        uintptr_t cb_off = base + (size_t)ystride * height;
+        ycbcr->cb = (void *)cb_off;
+        ycbcr->cr = (void *)(cb_off + 1);
         ycbcr->cstride = ystride;
         ycbcr->chroma_step = 2;
     }
@@ -284,8 +303,8 @@ static int gralloc_alloc(alloc_device_t* /*dev*/,
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
             bytesPerPixel = 1;
             bpp = 8;
-            alloc_width = width;
-            alloc_height = height * 3 / 2;
+            alloc_width = (width + 31) & ~31;
+            alloc_height = ((height + 1) & ~1) * 3 / 2;
             break;
         default:
             bytesPerPixel = 4;

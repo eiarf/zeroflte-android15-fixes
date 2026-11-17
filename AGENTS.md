@@ -41,15 +41,16 @@ Always reference and branch from these forked repositories:
 
 | Feature | Status | Notes / Root Cause / Solution |
 | :--- | :---: | :--- |
-| **Boot to Launcher** | 🟢 **WORKING** | Clean boot into LineageOS 22.2 launcher and UI. |
-| **Display / DRM / KMS** | 🟢 **WORKING** | DRM dumb buffer mmap & page-flipping functional at QHD. |
+| **Boot to Launcher** | 🟢 **WORKING** | Clean boot (~34s) into Android 15 launcher and UI. |
+| **Display / DRM / KMS** | 🟢 **WORKING** | Zero-copy DRM PRIME scanout (`s6_kms_hwcomposer.cpp`) + YV12/NV12 DMA-BUF offset handling (`s6_drm_gralloc.cpp`) for HEVC/AVC video playback; ~0.4% HWC CPU. |
 | **Touchscreen** | 🟢 **WORKING** | Inhibit state decoupled from early suspend; responsive on unlock. |
 | **Memory / ZRAM** | 🟢 **WORKING** | `zram.ko` + `zsmalloc.ko` active, 2048 MB swap disk, ~700MB free RAM. |
 | **Stability / Watchdog** | 🟢 **WORKING** | Autorecovery disarmed on `sys.boot_completed=1` (`autorecovery = 0`). |
-| **UI Responsiveness** | 🟢 **WORKING** | Top-app uclamp boost 15, GPU min 420MHz, Little min 600MHz, Big min 1000MHz. |
-| **ADB Root & Debugging** | 🟢 **WORKING** | Direct `adb root`, `adb remount` functional in development builds. |
-| **Camera** | 🔴 **NOT WORKING** | Exynos FIMC-IS ISP needs modern V4L2/libcamera AIDL HAL provider. |
-| **Sensors / Audio / Wi-Fi** | 🟡 **PARTIAL** | Upstream Kernel 6.6 driver staging. |
+| **UI Responsiveness** | 🟢 **WORKING** | 60 FPS UI (10-15 ms median frame time), ADPF `SCHED_QOS_*` in `task_profiles.json`, FHD 1080x1920 @ 420 dpi, GPU min 420MHz. |
+| **Audio** | 🟢 **WORKING** | `madera` / `cs47l85` / `max98925` / `zero-wm1840` modules modprobed in `early-init`; ALSA card 0 (`pcmC0D0p`) & Speaker active. |
+| **Wi-Fi & Bluetooth** | 🟢 **WORKING** | `BCM4358A3` (`brcmfmac4358-pcie.*` & `BCM4358A3.hcd`) staged in `/vendor/firmware/brcm/`; 2.4GHz/5GHz Wi-Fi & BT active. |
+| **ADB Debugging** | 🟢 **WORKING** | ADB functional; `/vendor` modification via TWRP (`/system_root/system/vendor`). |
+| **Camera** | 🔴 **NOT WORKING** | Exynos FIMC-IS ISP needs modern V4L2/libcamera AIDL HAL provider (`NK_HAS_CAMERA=false`). |
 
 ---
 
@@ -76,8 +77,8 @@ Always reference and branch from these forked repositories:
   - Governors: `schedutil` on all CPU policies (`policy0` & `policy1`).
   - GPU: `420000000` (420 MHz) minimum floor in `vendor.postboot`.
   - Little Cluster (`policy0`): `700000` (700 MHz) floor, `1500000` (1.5 GHz) max.
-  - Big Cluster (`policy1`): `1000000` (1.0 GHz) floor, `2100000` (2.1 GHz) max.
-  - UCLAMP top-app boost: `15.00` on touch / interaction.
+  - Big Cluster (`policy1`): `1000000` (1.0 GHz) floor, `1800000` (1.8 GHz) max (Linux 6.6 `scaling_available_frequencies` max).
+  - UCLAMP top-app boost: `15.00` on touch / interaction; `configs/task_profiles.json` defines `SCHED_QOS_SENSITIVE_STANDARD_{SET,CLEAR}` & `EXTREME` for PowerHAL ADPF.
 
 ### ⚠️ Rule 4: ALWAYS Enforce 2GB ZRAM Swap
 * **The Context**: Exynos 7420 has 3GB physical RAM. Android 15 core services (system_server, surfaceflinger, launcher, media) consume ~2.2GB alone.
@@ -93,6 +94,21 @@ Always reference and branch from these forked repositories:
 * **The Context**: Native Galaxy S6 display is 1440x2560 (3.7M pixels). The Mali-T760 MP8 struggles on Android 15 with software DRM/Mesa composition pushing this pixel load.
 * **Correct Procedure**: Use display downscaling to FHD (1080x1920 @ 420 dpi) which cuts GPU render workload by ~45%, delivering buttery smooth 60 FPS transitions.
 * **Control Script**: `/vendor/bin/set_resolution.sh [fhd|native|hd]` (controls `persist.vendor.display.resolution`). Default on boot is `fhd` (1080x1920 @ 420dpi). Switch to native QHD at any time via `set_resolution.sh native`.
+* **Note on Treble Namespace**: Because `vendor.postboot` executes in a vendor SELinux domain (`init_touch_sh`), Java CLI commands (`wm`/`settings`) cannot cross Treble's `/vendor` <-> `/system` linker namespace. After a fresh `/data` wipe, apply once via `adb shell sh /vendor/bin/set_resolution.sh fhd` (persists across normal reboots).
+
+### ⚠️ Rule 7: Zero-Copy HWC & Gralloc `lock_ycbcr` Offset Semantics (Video Playback)
+* **The Failure Mode**:
+  1. Copying 1440x2560x4 (14.7 MB/frame) via CPU `memcpy` in `s6_hwc_set()` chokes CPU (~35% load, ~150ms/frame latency -> 5 FPS UI).
+  2. Mesa `u_gralloc_fallback.c` calls `gralloc->lock_ycbcr(..., usage=0, l=0, t=0, w=0, h=0, &ycbcr)` expecting **0-based byte offsets** from NULL and full buffer height. Returning mapped virtual pointers or `ystride * h` (0) crashes `surfaceflinger` (`RenderEngine`: `Failed to create a valid texture ... format:842094169` / `YV12`) on video playback.
+* **Correct Procedure**:
+  - `s6_kms_hwcomposer.cpp` imports `private_handle_t->fd` via `drmPrimeFDToHandle` + `drmModeAddFB` (16-slot `gem_handle` LRU cache) and waits on `acquireFenceFd`.
+  - `s6_drm_gralloc.cpp` checks `usage & (GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK)`: returns byte offsets from `0` when `0`, uses `hnd->height`, aligns YUV `alloc_width` to 32 bytes, and 16-byte aligns `YV12` `cstride`.
+
+### ⚠️ Rule 8: Kernel Module Loading & `BCM4358A3` Firmware Staging
+* **The Context**: Clean ROM builds without `vendor/nk` do not ship `/vendor/etc/init/nk-modules.rc` or `/vendor/firmware/brcm/`, leaving Audio (`zero-wm1840`), Bluetooth (`hci0`), and Wi-Fi (`brcmfmac`) inactive.
+* **Correct Procedure**:
+  - `configs/init.samsungexynos7420.rc` (`on early-init`) runs `vendor_modprobe` on audio (`arizona-micsupp`, `madera*`, `snd-soc-cs47l85`, `snd-soc-i2s`, `snd-soc-max98925`, `snd-soc-zero-wm1840`) and BT (`bluetooth`, `btbcm`, `hci_uart`, `rfcomm`, `hidp`).
+  - `/vendor/firmware/brcm/` must contain `brcmfmac4358-pcie.{samsung,zeroflte.,}{bin,txt}` (from `/vendor/etc/wifi/bcmdhd_sta.bin` & `nvram_net.txt`) and `BCM4358A3.{samsung,zeroflte.,}hcd` (from `/vendor/firmware/bcm4358A3_V0083.0138.hcd`) labeled `u:object_r:vendor_firmware_file:s0` (automated in `scripts/apply_brcm_firmware.sh`).
 
 ---
 
@@ -155,8 +171,9 @@ adb shell sh /vendor/bin/init.postboot.sh
 
 ## 6. Directory Map in this Repository
 
-- `configs/`: Production-ready configurations (`init.samsungexynos7420.rc`, `init.power.rc`, `init.postboot.sh`, `powerhint.json`, `vendor_build.prop`).
-- `hwc-gralloc/`: Hardware Composer and DRM gralloc reference source codes (`s6_kms_hwcomposer.cpp`, `s6_drm_gralloc.cpp`) and dumb buffer test programs.
-- `scripts/`: Diagnostic, patching, and verification Python scripts.
+- `configs/`: Production-ready configurations (`init.samsungexynos7420.rc`, `init.power.rc`, `init.postboot.sh`, `powerhint.json`, `task_profiles.json`, `permissive_rules.cil`, `vendor_build.prop`).
+- `hwc-gralloc/`: Hardware Composer (`s6_kms_hwcomposer.cpp`, `hwcomposer.samsungexynos7420.so`) and DRM gralloc (`s6_drm_gralloc.cpp`, `gralloc.samsungexynos7420.so`) sources and prebuilt binaries.
+- `mesa-panfrost/`: Compiled Mesa 24.0.9 Panfrost & DRI runtime libraries (`libEGL.so`, `libGLES*.so`, `panfrost_dri.so`, etc.).
+- `scripts/`: Diagnostic, patching, and verification scripts (`apply_brcm_firmware.sh`, etc.).
 - `logs/`: TWRP recovery logs, ramoops, and kernel crash diagnostics captured during boot debugging.
 - `reports/`: In-depth engineering reports on boot recovery and performance optimization.
