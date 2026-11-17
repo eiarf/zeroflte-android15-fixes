@@ -228,6 +228,9 @@ on post-fs-data
 on boot
     #setprop ro.radio.noril yes
 
+    # Load V4L2 camera and companion SPI kernel modules
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules spi-exynos-gpio s5c73c2 s5k4e6 imx-mipi-csis exynos7-flite
+
     # IPSec for VOLTE
     chown root system /dev/socket
     chmod 0775 /dev/socket
