@@ -161,6 +161,13 @@ static int gralloc_lock_ycbcr(gralloc_module_t const* /*module*/,
         return -EINVAL;
 
     private_handle_t* hnd = (private_handle_t*)handle;
+    if (hnd->format != HAL_PIXEL_FORMAT_YV12 &&
+        hnd->format != HAL_PIXEL_FORMAT_YCrCb_420_SP &&
+        hnd->format != HAL_PIXEL_FORMAT_YCbCr_420_888) {
+        // Reject non-YUV formats (e.g. IMPLEMENTATION_DEFINED allocated as RGBX)
+        return -EINVAL;
+    }
+
     int sw_access = (usage & (GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK)) != 0;
     uintptr_t base = 0;
 
@@ -260,7 +267,7 @@ static int32_t gralloc_validateBufferSize(struct gralloc_module_t const* /*devic
 }
 
 static int gralloc_alloc(alloc_device_t* /*dev*/,
-        int width, int height, int format, int usage,
+        int width, int height, int format, int /*usage*/,
         buffer_handle_t* pHandle, int* pStride)
 {
     if (!pHandle || !pStride)
@@ -304,7 +311,8 @@ static int gralloc_alloc(alloc_device_t* /*dev*/,
             bytesPerPixel = 1;
             bpp = 8;
             alloc_width = (width + 31) & ~31;
-            alloc_height = ((height + 1) & ~1) * 3 / 2;
+            // Pad height to 16-line macroblock boundary to prevent SIMD decoder overruns
+            alloc_height = ((height + 15) & ~15) * 3 / 2;
             break;
         default:
             bytesPerPixel = 4;

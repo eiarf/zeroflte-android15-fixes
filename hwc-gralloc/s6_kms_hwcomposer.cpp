@@ -57,6 +57,7 @@ struct dumb_buf {
 struct hwc_fb_cache_entry {
     uint32_t gem_handle;
     uint32_t fb_id;
+    uint32_t drm_format;
     int width;
     int height;
     int stride;
@@ -136,6 +137,20 @@ static void release_fb_slot(int drm_fd, struct hwc_fb_cache_entry *slot) {
     memset(slot, 0, sizeof(*slot));
 }
 
+static uint32_t hal_format_to_drm(int format) {
+    switch (format) {
+        case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_RGBX_8888:
+            // Window 0 on Exynos 7420 DECON has no background plane; XBGR8888 selects
+            // 24BPP_xBGR ([R, G, B, X]) to match Android RGBA without stray alpha blend.
+            return DRM_FORMAT_XBGR8888;
+        case HAL_PIXEL_FORMAT_BGRA_8888:
+            return DRM_FORMAT_XRGB8888;
+        default:
+            return 0;
+    }
+}
+
 /*
  * Import a gralloc DMA-BUF PRIME FD directly into exynos-drm as a scanout FB.
  * Keying the cache by gem_handle (which the kernel keeps unique per dma_buf
@@ -149,10 +164,8 @@ static uint32_t s6_hwc_get_or_import_fb(struct s6_hwc_device *dev, const struct 
     if (hnd->width != (int)dev->mode.hdisplay || hnd->height != (int)dev->mode.vdisplay || hnd->stride < hnd->width)
         return 0;
 
-    // Only direct-scanout 32bpp formats match drmModeAddFB(depth=24, bpp=32)
-    if (hnd->format != HAL_PIXEL_FORMAT_RGBA_8888 &&
-        hnd->format != HAL_PIXEL_FORMAT_RGBX_8888 &&
-        hnd->format != HAL_PIXEL_FORMAT_BGRA_8888)
+    uint32_t drm_format = hal_format_to_drm(hnd->format);
+    if (!drm_format)
         return 0;
 
     uint32_t gem_handle = 0;
@@ -169,11 +182,12 @@ static uint32_t s6_hwc_get_or_import_fb(struct s6_hwc_device *dev, const struct 
     for (int i = 0; i < HWC_FB_CACHE_SIZE; i++) {
         struct hwc_fb_cache_entry *e = &dev->fb_cache[i];
         if (e->fb_id && e->gem_handle == gem_handle) {
-            if (e->width == hnd->width && e->height == hnd->height && e->stride == hnd->stride) {
+            if (e->width == hnd->width && e->height == hnd->height &&
+                e->stride == hnd->stride && e->drm_format == drm_format) {
                 e->last_used = ++dev->use_seq;
                 return e->fb_id;
             }
-            // Same underlying GEM buffer reused with different geometry: recreate FB only.
+            // Same underlying GEM buffer reused with different geometry/format: recreate FB only.
             drmModeRmFB(dev->drm_fd, e->fb_id);
             e->fb_id = 0;
             empty_slot = e;
@@ -201,9 +215,14 @@ static uint32_t s6_hwc_get_or_import_fb(struct s6_hwc_device *dev, const struct 
 
     uint32_t fb_id = 0;
     uint32_t pitch = (uint32_t)hnd->stride * 4U;
-    if (drmModeAddFB(dev->drm_fd, (uint32_t)hnd->width, (uint32_t)hnd->height, 24, 32, pitch, gem_handle, &fb_id) != 0 || fb_id == 0) {
+    uint32_t handles[4] = { gem_handle, 0, 0, 0 };
+    uint32_t pitches[4] = { pitch, 0, 0, 0 };
+    uint32_t offsets[4] = { (uint32_t)hnd->offset, 0, 0, 0 };
+    if (drmModeAddFB2(dev->drm_fd, (uint32_t)hnd->width, (uint32_t)hnd->height,
+                      drm_format, handles, pitches, offsets, &fb_id, 0) != 0 || fb_id == 0) {
         if (!dev->zc_failed_logged) {
-            ALOGW("Zero-copy drmModeAddFB failed (%s, pitch=%u), falling back to memcpy", strerror(errno), pitch);
+            ALOGW("Zero-copy drmModeAddFB2 failed (%s, fourcc=0x%08x pitch=%u), falling back to memcpy",
+                  strerror(errno), drm_format, pitch);
             dev->zc_failed_logged = 1;
         }
         if (owns_new_handle) {
@@ -216,13 +235,15 @@ static uint32_t s6_hwc_get_or_import_fb(struct s6_hwc_device *dev, const struct 
 
     target->gem_handle = gem_handle;
     target->fb_id = fb_id;
+    target->drm_format = drm_format;
     target->width = hnd->width;
     target->height = hnd->height;
     target->stride = hnd->stride;
     target->last_used = ++dev->use_seq;
 
     if (!dev->zc_logged) {
-        ALOGI("Zero-copy DRM PRIME scanout active (%dx%d stride=%d fb_id=%u)", hnd->width, hnd->height, hnd->stride, fb_id);
+        ALOGI("Zero-copy DRM PRIME scanout active (%dx%d stride=%d fourcc=0x%08x fb_id=%u)",
+              hnd->width, hnd->height, hnd->stride, drm_format, fb_id);
         dev->zc_logged = 1;
     }
     return fb_id;
@@ -523,9 +544,15 @@ static int init_drm(struct s6_hwc_device *dev) {
         }
 
         uint32_t fb_id = 0;
-        if (drmModeAddFB(fd, width, height, 24, 32, creq.pitch, creq.handle, &fb_id) != 0) {
-            ALOGE("drmModeAddFB failed");
-            break;
+        uint32_t handles[4] = { creq.handle, 0, 0, 0 };
+        uint32_t pitches[4] = { creq.pitch, 0, 0, 0 };
+        uint32_t offsets[4] = { 0, 0, 0, 0 };
+        if (drmModeAddFB2(fd, width, height, DRM_FORMAT_XBGR8888,
+                          handles, pitches, offsets, &fb_id, 0) != 0) {
+            if (drmModeAddFB(fd, width, height, 24, 32, creq.pitch, creq.handle, &fb_id) != 0) {
+                ALOGE("drmModeAddFB2/drmModeAddFB failed");
+                break;
+            }
         }
 
         struct drm_mode_map_dumb mreq;

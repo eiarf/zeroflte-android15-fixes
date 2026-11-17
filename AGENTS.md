@@ -96,13 +96,14 @@ Always reference and branch from these forked repositories:
 * **Control Script**: `/vendor/bin/set_resolution.sh [fhd|native|hd]` (controls `persist.vendor.display.resolution`). Default on boot is `fhd` (1080x1920 @ 420dpi). Switch to native QHD at any time via `set_resolution.sh native`.
 * **Note on Treble Namespace**: Because `vendor.postboot` executes in a vendor SELinux domain (`init_touch_sh`), Java CLI commands (`wm`/`settings`) cannot cross Treble's `/vendor` <-> `/system` linker namespace. After a fresh `/data` wipe, apply once via `adb shell sh /vendor/bin/set_resolution.sh fhd` (persists across normal reboots).
 
-### ⚠️ Rule 7: Zero-Copy HWC & Gralloc `lock_ycbcr` Offset Semantics (Video Playback)
+### ⚠️ Rule 7: Zero-Copy HWC, `DRM_FORMAT_XBGR8888` Scanout & Gralloc YUV Semantics
 * **The Failure Mode**:
   1. Copying 1440x2560x4 (14.7 MB/frame) via CPU `memcpy` in `s6_hwc_set()` chokes CPU (~35% load, ~150ms/frame latency -> 5 FPS UI).
-  2. Mesa `u_gralloc_fallback.c` calls `gralloc->lock_ycbcr(..., usage=0, l=0, t=0, w=0, h=0, &ycbcr)` expecting **0-based byte offsets** from NULL and full buffer height. Returning mapped virtual pointers or `ystride * h` (0) crashes `surfaceflinger` (`RenderEngine`: `Failed to create a valid texture ... format:842094169` / `YV12`) on video playback.
+  2. Calling legacy `drmModeAddFB(..., 24, 32, ...)` registers Exynos 7420 DECON with `DRM_FORMAT_XRGB8888` (`[B,G,R,X]`), while Android `RGBA_8888` / `RGBX_8888` is `[R,G,B,A/X]` — swapping Red & Blue across the entire screen and making videos/YouTube look color-inverted.
+  3. Mesa `u_gralloc_fallback.c` calls `gralloc->lock_ycbcr(..., usage=0, l=0, t=0, w=0, h=0, &ycbcr)` expecting **0-based byte offsets** from NULL and full buffer height (and expects `-EINVAL` for non-YUV formats like `IMPLEMENTATION_DEFINED`). Returning mapped virtual pointers or `ystride * h` (0) crashes `surfaceflinger` (`RenderEngine`: `Failed to create a valid texture ... format:842094169` / `YV12`) on video playback.
 * **Correct Procedure**:
-  - `s6_kms_hwcomposer.cpp` imports `private_handle_t->fd` via `drmPrimeFDToHandle` + `drmModeAddFB` (16-slot `gem_handle` LRU cache) and waits on `acquireFenceFd`.
-  - `s6_drm_gralloc.cpp` checks `usage & (GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK)`: returns byte offsets from `0` when `0`, uses `hnd->height`, aligns YUV `alloc_width` to 32 bytes, and 16-byte aligns `YV12` `cstride`.
+  - `s6_kms_hwcomposer.cpp` maps `RGBA_8888`/`RGBX_8888` -> `DRM_FORMAT_XBGR8888` (24BPP_xBGR on DECON Window 0) and `BGRA_8888` -> `DRM_FORMAT_XRGB8888` using `drmModeAddFB2`, imports `private_handle_t->fd` via `drmPrimeFDToHandle` (16-slot `gem_handle` LRU cache keyed with format), and waits on `acquireFenceFd`.
+  - `s6_drm_gralloc.cpp` rejects non-YUV formats in `lock_ycbcr()`, returns byte offsets from `0` when `SW_READ/WRITE` is `0`, uses `hnd->height`, aligns YUV `alloc_width` to 32 bytes, `alloc_height` to 16-line macroblock padding, and 16-byte aligns `YV12` `cstride`.
 
 ### ⚠️ Rule 8: Kernel Module Loading & `BCM4358A3` Firmware Staging
 * **The Context**: Clean ROM builds without `vendor/nk` do not ship `/vendor/etc/init/nk-modules.rc` or `/vendor/firmware/brcm/`, leaving Audio (`zero-wm1840`), Bluetooth (`hci0`), and Wi-Fi (`brcmfmac`) inactive.
