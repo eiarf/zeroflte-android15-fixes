@@ -1,6 +1,10 @@
 # Samsung Galaxy S6 (zeroflte) - Android 15 & Kernel 6.6 Fixes & Optimizations
 
+> **LLM Attribution Note:** All bring-up work, driver/HAL implementations, configuration patches, debugging, and fixed ROM packaging documented in this repository (and the linked `@eiarf` forks) were **performed by an LLM (Large Language Model)**, with live verification conducted on a physical Samsung Galaxy S6 (`SM-G920F` / `zeroflte`).
+
 This repository contains diagnostic tools, patched configuration files, kernel and hardware abstraction fixes, performance enhancements (ZRAM, CPU/GPU scaling), logs, and comprehensive technical documentation developed for running **Android 15 (LineageOS 22.2)** on the **Samsung Galaxy S6 (`zeroflte` / SM-G920F / Exynos 7420)** powered by the **Mainline Linux Kernel 6.6**.
+
+**Pre-patched Flashable ROM Release:** See [GitHub Releases](https://github.com/eiarf/zeroflte-android15-fixes/releases/tag/infinity-x-2.9-zeroflte-20261114-fixed) for the updated `Project_Infinity-X-2.9-zeroflte-20261114-1720-VANILLA-UNOFFICIAL.zip` + `.sha256`.
 
 ---
 
@@ -129,4 +133,4 @@ adb shell "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"
 
 - Upstream Device Trees & Kernel Port: [farovitus](https://github.com/farovitus) & LineageOS Exynos 7420 contributors.
 - Android 15 LineageOS 22.2 Maintainers.
-- Debugging, stability fixes, ZRAM & performance optimization by **eiarf**.
+- LLM-driven hardware bring-up, kernel/HAL porting, debugging, and optimization orchestrated under **eiarf** (explicitly LLM-authored).
