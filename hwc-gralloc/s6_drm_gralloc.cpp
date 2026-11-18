@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <unordered_map>
 
 #include <android/log.h>
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -62,7 +63,7 @@ struct private_handle_t {
 
     private_handle_t(int fd, int size, int flags, int width, int height, int format, int stride) :
         fd(fd), magic(sMagic), flags(flags), size(size), offset(0),
-        base(0), pid(getpid()), width(width), height(height), format(format), stride(stride)
+        base(0), pid(0), width(width), height(height), format(format), stride(stride)
     {
         version = sizeof(native_handle);
         numInts = sNumInts();
@@ -86,22 +87,53 @@ struct private_handle_t {
     }
 };
 
+static_assert(sizeof(native_handle_t) == 12, "native_handle_t 32/64-bit size mismatch");
+static_assert(sizeof(private_handle_t) == 64, "private_handle_t 32/64-bit size mismatch");
+static_assert(alignof(private_handle_t) == 8, "private_handle_t 32/64-bit align mismatch");
+
+struct MappedBuffer {
+    void* addr;
+    size_t size;
+    int fd;
+};
+
+static pthread_mutex_t g_map_lock = PTHREAD_MUTEX_INITIALIZER;
+static std::unordered_map<const native_handle*, MappedBuffer> g_maps;
+
 static int gralloc_map(buffer_handle_t handle, void** vaddr) {
     if (private_handle_t::validate(handle) < 0)
         return -EINVAL;
 
     private_handle_t* hnd = (private_handle_t*)handle;
-    if (!hnd->base || hnd->pid != getpid()) {
-        size_t size = hnd->size;
-        void* mapped = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, hnd->fd, 0);
-        if (mapped == MAP_FAILED) {
-            ALOGE("gralloc_map: mmap failed for fd=%d size=%zu: %s", hnd->fd, size, strerror(errno));
-            return -errno;
+    size_t size = (size_t)hnd->size;
+    void* mapped = NULL;
+
+    pthread_mutex_lock(&g_map_lock);
+    auto it = g_maps.find(handle);
+    if (it != g_maps.end()) {
+        if (it->second.fd == hnd->fd && it->second.size == size) {
+            mapped = it->second.addr;
+        } else {
+            munmap(it->second.addr, it->second.size);
+            g_maps.erase(it);
         }
-        hnd->base = uintptr_t(mapped) + hnd->offset;
-        hnd->pid = getpid();
     }
-    if (vaddr) *vaddr = (void*)hnd->base;
+    if (!mapped) {
+        mapped = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, hnd->fd, 0);
+        if (mapped == MAP_FAILED) {
+            int err = errno;
+            pthread_mutex_unlock(&g_map_lock);
+            ALOGE("gralloc_map: mmap failed for fd=%d size=%zu: %s", hnd->fd, size, strerror(err));
+            return -err;
+        }
+        g_maps[handle] = MappedBuffer{mapped, size, hnd->fd};
+    }
+    uint64_t base = (uint64_t)(uintptr_t)mapped + (uint64_t)hnd->offset;
+    hnd->base = base;
+    hnd->pid = getpid();
+    pthread_mutex_unlock(&g_map_lock);
+
+    if (vaddr) *vaddr = (void*)(uintptr_t)base;
     return 0;
 }
 
@@ -110,13 +142,24 @@ static int gralloc_unmap(buffer_handle_t handle) {
         return -EINVAL;
 
     private_handle_t* hnd = (private_handle_t*)handle;
-    if (hnd->base && hnd->pid == getpid()) {
-        void* base = (void*)(hnd->base - hnd->offset);
-        size_t size = hnd->size;
-        if (munmap(base, size) < 0) {
+    void* addr = NULL;
+    size_t size = 0;
+
+    pthread_mutex_lock(&g_map_lock);
+    auto it = g_maps.find(handle);
+    if (it != g_maps.end()) {
+        addr = it->second.addr;
+        size = it->second.size;
+        g_maps.erase(it);
+    }
+    hnd->base = 0;
+    hnd->pid = 0;
+    pthread_mutex_unlock(&g_map_lock);
+
+    if (addr) {
+        if (munmap(addr, size) < 0) {
             ALOGE("gralloc_unmap: munmap failed: %s", strerror(errno));
         }
-        hnd->base = 0;
     }
     return 0;
 }
@@ -134,17 +177,7 @@ static int gralloc_lock(gralloc_module_t const* /*module*/,
                  buffer_handle_t handle, int /*usage*/,
                  int /*l*/, int /*t*/, int /*w*/, int /*h*/,
                  void** vaddr) {
-    if (private_handle_t::validate(handle) < 0)
-        return -EINVAL;
-
-    private_handle_t* hnd = (private_handle_t*)handle;
-    if (!hnd->base || hnd->pid != getpid()) {
-        int err = gralloc_map(handle, vaddr);
-        if (err) return err;
-    } else {
-        if (vaddr) *vaddr = (void*)hnd->base;
-    }
-    return 0;
+    return gralloc_map(handle, vaddr);
 }
 
 static int gralloc_unlock(gralloc_module_t const* /*module*/, buffer_handle_t handle) {
@@ -172,12 +205,10 @@ static int gralloc_lock_ycbcr(gralloc_module_t const* /*module*/,
     uintptr_t base = 0;
 
     if (sw_access) {
-        if (!hnd->base || hnd->pid != getpid()) {
-            void *vaddr = NULL;
-            int err = gralloc_map(handle, &vaddr);
-            if (err) return err;
-        }
-        base = (uintptr_t)hnd->base;
+        void *vaddr = NULL;
+        int err = gralloc_map(handle, &vaddr);
+        if (err) return err;
+        base = (uintptr_t)vaddr;
     }
 
     int width = (hnd->width > 0) ? hnd->width : w;

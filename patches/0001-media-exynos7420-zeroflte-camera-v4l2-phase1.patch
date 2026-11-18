@@ -331,6 +331,48 @@ index ed8fe1d9d..942e44040 100644
  }
  
  CLK_OF_DECLARE(exynos7_clk_top0, "samsung,exynos7-clock-top0",
+diff --git a/drivers/gpu/drm/panfrost/panfrost_dump.c b/drivers/gpu/drm/panfrost/panfrost_dump.c
+index e7942ac44..01e582fa4 100644
+--- a/drivers/gpu/drm/panfrost/panfrost_dump.c
++++ b/drivers/gpu/drm/panfrost/panfrost_dump.c
+@@ -203,8 +203,7 @@ void panfrost_core_dump(struct panfrost_job *job)
+ 		bo = to_panfrost_bo(job->bos[i]);
+ 		mapping = job->mappings[i];
+ 
+-		if (!bo->base.sgt) {
+-			dev_err(pfdev->dev, "Panfrost Dump: BO has no sgt, cannot dump\n");
++		if (bo->base.base.import_attach || !bo->base.sgt) {
+ 			iter.hdr->bomap.valid = 0;
+ 			goto dump_header;
+ 		}
+diff --git a/drivers/gpu/drm/panfrost/panfrost_job.c b/drivers/gpu/drm/panfrost/panfrost_job.c
+index ce5a492c6..65c4ccb01 100644
+--- a/drivers/gpu/drm/panfrost/panfrost_job.c
++++ b/drivers/gpu/drm/panfrost/panfrost_job.c
+@@ -22,7 +22,7 @@
+ #include "panfrost_mmu.h"
+ #include "panfrost_dump.h"
+ 
+-#define JOB_TIMEOUT_MS 500
++#define JOB_TIMEOUT_MS 2000
+ 
+ #define job_write(dev, reg, data) writel(data, dev->iomem + (reg))
+ #define job_read(dev, reg) readl(dev->iomem + (reg))
+diff --git a/drivers/gpu/drm/panfrost/panfrost_mmu.c b/drivers/gpu/drm/panfrost/panfrost_mmu.c
+index d2204ee69..4fb8930ec 100644
+--- a/drivers/gpu/drm/panfrost/panfrost_mmu.c
++++ b/drivers/gpu/drm/panfrost/panfrost_mmu.c
+@@ -179,9 +179,9 @@ u32 panfrost_mmu_as_get(struct panfrost_device *pfdev, struct panfrost_mmu *mmu)
+ 			 * disabled. We need to re-enable the MMU after
+ 			 * clearing+unmasking the AS interrupts.
+ 			 */
++			pfdev->as_faulty_mask &= ~mask;
+ 			mmu_write(pfdev, MMU_INT_CLEAR, mask);
+ 			mmu_write(pfdev, MMU_INT_MASK, ~pfdev->as_faulty_mask);
+-			pfdev->as_faulty_mask &= ~mask;
+ 			panfrost_mmu_enable(pfdev, mmu);
+ 		}
+ 
 diff --git a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
 index 02a509f4f..b867993f7 100644
 --- a/drivers/media/i2c/Kconfig
