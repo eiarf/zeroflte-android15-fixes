@@ -1,0 +1,1528 @@
+diff --git a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte-touch-power.dtsi b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte-touch-power.dtsi
+index 78bc66ff9..9b4dcadf3 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte-touch-power.dtsi
++++ b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte-touch-power.dtsi
+@@ -118,6 +118,28 @@ vcc_motor: LDO17 {
+ 					regulator-max-microvolt = <3000000>;
+ 				};
+ 
++				/* MAX86900 HRM digital 1.8V supply (stock LDO18). */
++				hrm_vdd_ldo18: LDO18 {
++					regulator-name = "HRM_VDD_1.8V";
++					regulator-min-microvolt = <1800000>;
++					regulator-max-microvolt = <1850000>;
++				};
++
++				/* S3FWRN5 NFC I2C 1.8V pull-up supply (stock LDO20). */
++				nfc_i2c_ldo20: LDO20 {
++					regulator-name = "VDD20_1P8_AP";
++					regulator-min-microvolt = <1800000>;
++					regulator-max-microvolt = <1800000>;
++					regulator-boot-on;
++				};
++
++				/* MAX86900 HRM LED 3.3V supply (stock LDO24). */
++				hrm_led_ldo24: LDO24 {
++					regulator-name = "V_HRM_3.3V";
++					regulator-min-microvolt = <3300000>;
++					regulator-max-microvolt = <3350000>;
++				};
++
+ 				/* Touch key core supply; the 3.10 driver enables it at probe. */
+ 				touchkey_vdd_ldo21: LDO21 {
+ 					regulator-name = "vtouch_3.3v";
+diff --git a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+index 6f16c471a..3a3a4441e 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
++++ b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+@@ -45,6 +45,7 @@ aliases {
+ 		i2c3 = &i2c_max77843;
+ 		i2c4 = "/i2c-amp";
+ 		i2c5 = &hsi2c_7;
++		i2c9 = &hsi2c_6;
+ 	};
+ 
+ 	chosen {
+@@ -215,6 +216,13 @@ sclk_phy_fsys1_26m: clock-sclk-phy-fsys1-26m {
+ 			clock-output-names = "sclk_phy_fsys1_26m";
+ 		};
+ 
++		hsi2c6_clk: clock-hsi2c6 {
++			compatible = "fixed-clock";
++			#clock-cells = <0>;
++			clock-frequency = <133000000>;
++			clock-output-names = "hsi2c6_pclk";
++		};
++
+ 		hsi2c7_clk: clock-hsi2c7 {
+ 			compatible = "fixed-clock";
+ 			#clock-cells = <0>;
+@@ -1285,6 +1293,44 @@ opp-700000000 {
+ 	};
+ };
+ 
++&hsi2c_6 {
++	/* PCLK_HSI2C6 lives in the disabled CMU_PERIC1; S-Boot leaves it on. */
++	clocks = <&hsi2c6_clk>;
++	/*
++	 * The gpj0 pins sit on the secure-owned pinctrl_nfc (kept disabled).
++	 * Deep sleep resets their mux; the secure firmware restores bus 6.
++	 */
++	/delete-property/ pinctrl-names;
++	/delete-property/ pinctrl-0;
++	samsung,secure-pins-bus = <6>;
++	clock-frequency = <400000>;
++	status = "okay";
++
++	max86900@51 {
++		compatible = "maxim,max86900";
++		reg = <0x51>;
++		interrupt-parent = <&gpa1>;
++		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
++		vdd-supply = <&hrm_vdd_ldo18>;
++		led-supply = <&hrm_led_ldo24>;
++	};
++
++	sec-nfc@27 {
++		compatible = "samsung,sec-nfc";
++		reg = <0x27>;
++		interrupt-parent = <&gpa0>;
++		interrupts = <6 IRQ_TYPE_EDGE_RISING>;
++		ven-gpios = <&gpf1 5 GPIO_ACTIVE_HIGH>;
++		firm-gpios = <&gpf5 4 GPIO_ACTIVE_HIGH>;
++		clk-req-gpios = <&gpa2 6 GPIO_ACTIVE_HIGH>;
++		vdd-supply = <&nfc_i2c_ldo20>;
++		clocks = <&clock_top0 CLK_SCLK_ISP_SENSOR1>;
++		clock-names = "sclk_isp_sensor1";
++		assigned-clocks = <&clock_top0 CLK_MOUT_SCLK_ISP_SENSOR1>;
++		assigned-clock-parents = <&fin_pll>;
++	};
++};
++
+ &hsi2c_7 {
+ 	/* PCLK_HSI2C7 lives in the disabled CMU_PERIC1; S-Boot leaves it on. */
+ 	clocks = <&hsi2c7_clk>;
+diff --git a/arch/arm64/configs/zeroflte_gki.fragment b/arch/arm64/configs/zeroflte_gki.fragment
+index 5c337273b..e62de2381 100644
+--- a/arch/arm64/configs/zeroflte_gki.fragment
++++ b/arch/arm64/configs/zeroflte_gki.fragment
+@@ -387,3 +387,7 @@ CONFIG_VIDEO_IDG2030=m
+ CONFIG_VIDEO_IMX_MIPI_CSIS=m
+ CONFIG_VIDEO_EXYNOS7_FLITE=m
+ CONFIG_CMA_SIZE_MBYTES=32
++
++CONFIG_MAX86900=m
++
++CONFIG_SEC_NFC_I2C=m
+diff --git a/drivers/i2c/busses/i2c-exynos5.c b/drivers/i2c/busses/i2c-exynos5.c
+index 29cd0c023..5baf9477c 100644
+--- a/drivers/i2c/busses/i2c-exynos5.c
++++ b/drivers/i2c/busses/i2c-exynos5.c
+@@ -938,6 +938,9 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
+ 
+ 	exynos5_i2c_reset(i2c);
+ 
++	if (i2c->secure_pins_bus >= 0 && i2c->secure_pins_bus != 7)
++		i2c->restore_pins = true;
++
+ 	ret = i2c_add_adapter(&i2c->adap);
+ 	if (ret < 0)
+ 		goto err_clk;
+diff --git a/drivers/iio/common/ssp_sensors/ssp.h b/drivers/iio/common/ssp_sensors/ssp.h
+index 4c813420a..9ba1e4127 100644
+--- a/drivers/iio/common/ssp_sensors/ssp.h
++++ b/drivers/iio/common/ssp_sensors/ssp.h
+@@ -97,6 +97,8 @@ enum {
+ #define SSP_MSG2SSP_AP_SET_MAGNETIC_STATIC_MATRIX	0xfd
+ #define SSP_MSG2SSP_AP_SENSOR_TILT			0xea
+ #define SSP_MSG2SSP_AP_GLASS_TYPE			0xec
++#define SSP_MSG2SSP_AP_IRDATA_SEND			0x38
++#define SSP_MSG2SSP_AP_IRDATA_SEND_RESULT		0x39
+ #define SSP_MSG2SSP_AP_MCU_SET_TIME			0xfe
+ #define SSP_MSG2SSP_AP_MCU_GET_TIME			0xff
+ 
+@@ -296,6 +298,8 @@ struct ssp_data {
+ 	u32 glass_type;
+ 	u32 prox_thresh[2];
+ 	u8 mag_matrix[18];
++	struct class *sensors_class;
++	struct device *irled_dev;
+ 
+ 	__le16 header_buffer[SSP_HEADER_BUFFER_SIZE / sizeof(__le16)] __aligned(IIO_DMA_MINALIGN);
+ };
+@@ -308,7 +312,8 @@ void ssp_data_release(struct ssp_data *data);
+ void ssp_enable_mcu(struct ssp_data *data, bool enable);
+ int ssp_initialize_mcu(struct ssp_data *data);
+ void ssp_resync_sensors(struct ssp_data *data);
+-int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u8 len);
++int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u16 len);
++int ssp_read_cmd(struct ssp_data *data, u8 cmd, void *buf, u16 len);
+ int ssp_hub_id(struct ssp_data *data, enum ssp_sensor_type type);
+ 
+ #ifdef CONFIG_IIO_SSP_SENSORHUB_BCM4773
+diff --git a/drivers/iio/common/ssp_sensors/ssp_bbd.c b/drivers/iio/common/ssp_sensors/ssp_bbd.c
+index 94b3e1dd9..b7a0db8b6 100644
+--- a/drivers/iio/common/ssp_sensors/ssp_bbd.c
++++ b/drivers/iio/common/ssp_sensors/ssp_bbd.c
+@@ -9,11 +9,14 @@
+  */
+ 
+ #include <linux/bcm4773.h>
++#include <linux/device.h>
+ #include <linux/mfd/core.h>
+ #include <linux/mod_devicetable.h>
+ #include <linux/module.h>
+ #include <linux/platform_device.h>
+ #include <linux/property.h>
++#include <linux/slab.h>
++#include <linux/sysfs.h>
+ #include <asm/unaligned.h>
+ 
+ #include "ssp.h"
+@@ -283,6 +286,101 @@ static int ssp_bbd_parse_dt(struct ssp_data *data)
+ 	return 0;
+ }
+ 
++#define SSP_IRLED_MAX_BUF	1024
++
++static ssize_t vendor_show(struct device *dev, struct device_attribute *attr,
++			   char *buf)
++{
++	return sysfs_emit(buf, "AMS\n");
++}
++static DEVICE_ATTR_RO(vendor);
++
++static ssize_t name_show(struct device *dev, struct device_attribute *attr,
++			 char *buf)
++{
++	return sysfs_emit(buf, "TMG399x\n");
++}
++static DEVICE_ATTR_RO(name);
++
++static ssize_t irled_send_show(struct device *dev,
++			       struct device_attribute *attr, char *buf)
++{
++	struct ssp_data *data = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%d\n",
++			  READ_ONCE(data->hub_ready) &&
++			  (data->available_sensors & BIT(SSP_BBD_PROX_HUB_ID)) ? 1 : 0);
++}
++
++static ssize_t irled_send_store(struct device *dev,
++				struct device_attribute *attr,
++				const char *buf, size_t count)
++{
++	struct ssp_data *data = dev_get_drvdata(dev);
++	char *kbuf;
++	size_t len;
++	int ret;
++
++	if (!count || count >= SSP_IRLED_MAX_BUF)
++		return -EINVAL;
++	if (!READ_ONCE(data->hub_ready) || data->shut_down)
++		return -EAGAIN;
++	if (!(data->available_sensors & BIT(SSP_BBD_PROX_HUB_ID)))
++		return -ENODEV;
++
++	kbuf = kzalloc(count + 1, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	memcpy(kbuf, buf, count);
++	len = count;
++	while (len > 0 && (kbuf[len - 1] == '\n' || kbuf[len - 1] == '\r' ||
++			   kbuf[len - 1] == '\0'))
++		kbuf[--len] = '\0';
++
++	if (!len) {
++		kfree(kbuf);
++		return -EINVAL;
++	}
++
++	ret = ssp_write_cmd(data, SSP_MSG2SSP_AP_IRDATA_SEND, kbuf, (u16)(len + 1));
++	kfree(kbuf);
++	if (ret < 0) {
++		dev_err(data->dev, "IRDATA_SEND failed: %d\n", ret);
++		return ret;
++	}
++
++	return count;
++}
++static DEVICE_ATTR_RW(irled_send);
++
++static ssize_t irled_send_result_show(struct device *dev,
++				      struct device_attribute *attr, char *buf)
++{
++	struct ssp_data *data = dev_get_drvdata(dev);
++	u8 result = 0;
++	int ret;
++
++	if (!READ_ONCE(data->hub_ready) || data->shut_down)
++		return -EAGAIN;
++
++	ret = ssp_read_cmd(data, SSP_MSG2SSP_AP_IRDATA_SEND_RESULT, &result, 1);
++	if (ret < 0)
++		return ret;
++
++	return sysfs_emit(buf, "%u\n", result);
++}
++static DEVICE_ATTR_RO(irled_send_result);
++
++static struct attribute *ssp_irled_attrs[] = {
++	&dev_attr_vendor.attr,
++	&dev_attr_name.attr,
++	&dev_attr_irled_send.attr,
++	&dev_attr_irled_send_result.attr,
++	NULL
++};
++ATTRIBUTE_GROUPS(ssp_irled);
++
+ static int ssp_bbd_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -316,16 +414,39 @@ static int ssp_bbd_probe(struct platform_device *pdev)
+ 		goto err_release;
+ 	}
+ 
++	data->sensors_class = class_create("sensors");
++	if (!IS_ERR(data->sensors_class)) {
++		data->irled_dev = device_create_with_groups(data->sensors_class,
++							    dev, 0, data,
++							    ssp_irled_groups,
++							    "irled_remote");
++		if (IS_ERR(data->irled_dev)) {
++			dev_warn(dev, "irled_remote sysfs create failed: %ld\n",
++				 PTR_ERR(data->irled_dev));
++			data->irled_dev = NULL;
++			class_destroy(data->sensors_class);
++			data->sensors_class = NULL;
++		}
++	} else {
++		dev_warn(dev, "sensors class create failed: %ld\n",
++			 PTR_ERR(data->sensors_class));
++		data->sensors_class = NULL;
++	}
++
+ 	/* Calls ssp_bbd_ready() at once if the hub already runs. */
+ 	ret = bcm4773_register_client(data->hub, &ssp_bbd_client_ops, data);
+ 	if (ret) {
+ 		dev_err_probe(dev, ret, "cannot attach to the BCM4773\n");
+-		goto err_mfd;
++		goto err_irled;
+ 	}
+ 
+ 	return 0;
+ 
+-err_mfd:
++err_irled:
++	if (data->irled_dev)
++		device_unregister(data->irled_dev);
++	if (data->sensors_class)
++		class_destroy(data->sensors_class);
+ 	mfd_remove_devices(dev);
+ err_release:
+ 	ssp_data_release(data);
+@@ -336,6 +457,10 @@ static void ssp_bbd_remove(struct platform_device *pdev)
+ {
+ 	struct ssp_data *data = platform_get_drvdata(pdev);
+ 
++	if (data->irled_dev)
++		device_unregister(data->irled_dev);
++	if (data->sensors_class)
++		class_destroy(data->sensors_class);
+ 	mfd_remove_devices(&pdev->dev);
+ 
+ 	bcm4773_unregister_client(data->hub);
+diff --git a/drivers/iio/common/ssp_sensors/ssp_spi.c b/drivers/iio/common/ssp_sensors/ssp_spi.c
+index b1436a281..cecffc717 100644
+--- a/drivers/iio/common/ssp_sensors/ssp_spi.c
++++ b/drivers/iio/common/ssp_sensors/ssp_spi.c
+@@ -711,11 +711,14 @@ int ssp_get_chipid(struct ssp_data *data)
+  *
+  * Returns 0 or negative value in case of error
+  */
+-int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u8 len)
++int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u16 len)
+ {
+ 	struct ssp_msg *msg;
+ 	int ret;
+ 
++	if (!len)
++		return -EINVAL;
++
+ 	msg = ssp_create_msg(cmd, len, SSP_AP2HUB_WRITE, 0);
+ 	if (!msg)
+ 		return -ENOMEM;
+@@ -728,6 +731,26 @@ int ssp_write_cmd(struct ssp_data *data, u8 cmd, const void *buf, u8 len)
+ 	return ret;
+ }
+ 
++int ssp_read_cmd(struct ssp_data *data, u8 cmd, void *buf, u16 len)
++{
++	struct ssp_msg *msg;
++	int ret;
++
++	if (!len)
++		return -EINVAL;
++
++	msg = ssp_create_msg(cmd, len, SSP_AP2HUB_READ, 0);
++	if (!msg)
++		return -ENOMEM;
++
++	ret = ssp_spi_sync(data, msg, 1000);
++	if (ret >= 0)
++		ssp_get_buffer(msg, 0, buf, len);
++	ssp_clean_msg(msg);
++
++	return ret;
++}
++
+ int ssp_set_magnetic_matrix(struct ssp_data *data)
+ {
+ 	int ret;
+diff --git a/drivers/iio/health/Kconfig b/drivers/iio/health/Kconfig
+index a89f3abf1..34dd7bed0 100644
+--- a/drivers/iio/health/Kconfig
++++ b/drivers/iio/health/Kconfig
+@@ -34,6 +34,15 @@ config AFE4404
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called afe4404.
+ 
++config MAX86900
++	tristate "Maxim MAX86900 optical heart-rate and SpO2 sensor"
++	depends on I2C
++	select IIO_BUFFER
++	select IIO_KFIFO_BUF
++	help
++	  Say Y here to build support for the Maxim MAX86900 heart-rate
++	  and SpO2 sensor used on Samsung Galaxy S6 (zeroflte).
++
+ config MAX30100
+ 	tristate "MAX30100 heart rate and pulse oximeter sensor"
+ 	depends on I2C
+diff --git a/drivers/iio/health/Makefile b/drivers/iio/health/Makefile
+index 910817112..5c2971301 100644
+--- a/drivers/iio/health/Makefile
++++ b/drivers/iio/health/Makefile
+@@ -9,3 +9,4 @@ obj-$(CONFIG_AFE4403)		+= afe4403.o
+ obj-$(CONFIG_AFE4404)		+= afe4404.o
+ obj-$(CONFIG_MAX30100)		+= max30100.o
+ obj-$(CONFIG_MAX30102)		+= max30102.o
++obj-$(CONFIG_MAX86900) += max86900.o
+diff --git a/drivers/iio/health/max86900.c b/drivers/iio/health/max86900.c
+new file mode 100755
+index 000000000..79d2d4b61
+--- /dev/null
++++ b/drivers/iio/health/max86900.c
+@@ -0,0 +1,560 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Maxim MAX86900 / MAX86900A Optical Heart-Rate & SpO2 Sensor IIO Driver
++ * for Samsung Galaxy S6 (Exynos 7420 / zeroflte) on Linux 6.6.
++ */
++
++#include <linux/delay.h>
++#include <linux/i2c.h>
++#include <linux/interrupt.h>
++#include <linux/ktime.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/regulator/consumer.h>
++#include <linux/workqueue.h>
++
++#include <linux/iio/buffer.h>
++#include <linux/iio/iio.h>
++#include <linux/iio/kfifo_buf.h>
++
++#define MAX86900_REG_INT_STATUS		0x00
++#define MAX86900_REG_INT_ENABLE		0x01
++#define MAX86900_REG_FIFO_WR_PTR	0x02
++#define MAX86900_REG_OVF_COUNTER	0x03
++#define MAX86900_REG_FIFO_RD_PTR	0x04
++#define MAX86900_REG_FIFO_DATA		0x05
++#define MAX86900_REG_MODE_CONFIG	0x06
++#define MAX86900_REG_SPO2_CONFIG	0x07
++#define MAX86900_REG_LED_CONFIG		0x09
++#define MAX86900_REG_TEMP_INT		0x16
++#define MAX86900_REG_TEMP_FRAC		0x17
++#define MAX86900_REG_REV_ID		0xFE
++#define MAX86900_REG_PART_ID		0xFF
++
++#define MAX86900_MODE_RESET		0x40
++#define MAX86900_MODE_SHDN		0x80
++#define MAX86900_MODE_SPO2_EN		0x03
++#define MAX86900_MODE_SPO2_TEMP		0x0B
++
++/* 100 Hz sample rate, 400 us pulse width (16-bit ADC) */
++#define MAX86900_SPO2_100HZ_400US	0x47
++#define MAX86900_DEFAULT_LED_CURR	0x55
++#define MAX86900_FINGER_IR_THRESH	6000
++
++struct max86900_data {
++	struct i2c_client *client;
++	struct iio_dev *indio_dev;
++	struct regulator *vdd;
++	struct regulator *led;
++	struct mutex lock;
++	struct delayed_work poll_work;
++
++	bool streaming;
++	u8 part_id;
++	u8 rev_id;
++	u8 led_current;
++
++	/* Last raw readings */
++	u16 last_ir;
++	u16 last_red;
++	s32 last_bpm;
++
++	/* Simple PPG peak detector state (100 Hz -> 25 Hz averaged) */
++	s64 dc_ir;
++	s32 prev_ac;
++	s32 prev2_ac;
++	s64 last_peak_ns;
++	s32 bpm_hist[4];
++	int bpm_hist_idx;
++	int bpm_hist_cnt;
++	int sample_div;
++};
++
++struct max86900_scan {
++	s32 bpm;
++	u16 ir;
++	u16 red;
++	s64 ts __aligned(8);
++};
++
++static const struct iio_chan_spec max86900_channels[] = {
++	{
++		.type = IIO_COUNT,
++		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
++		.scan_index = 0,
++		.scan_type = {
++			.sign = 's',
++			.realbits = 32,
++			.storagebits = 32,
++			.endianness = IIO_CPU,
++		},
++	},
++	{
++		.type = IIO_INTENSITY,
++		.modified = 1,
++		.channel2 = IIO_MOD_LIGHT_IR,
++		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
++		.scan_index = 1,
++		.scan_type = {
++			.sign = 'u',
++			.realbits = 16,
++			.storagebits = 16,
++			.endianness = IIO_CPU,
++		},
++	},
++	{
++		.type = IIO_INTENSITY,
++		.modified = 1,
++		.channel2 = IIO_MOD_LIGHT_RED,
++		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
++		.scan_index = 2,
++		.scan_type = {
++			.sign = 'u',
++			.realbits = 16,
++			.storagebits = 16,
++			.endianness = IIO_CPU,
++		},
++	},
++	{
++		.type = IIO_TEMP,
++		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
++		.scan_index = -1,
++	},
++	IIO_CHAN_SOFT_TIMESTAMP(3),
++};
++
++static int max86900_write_reg(struct max86900_data *st, u8 reg, u8 val)
++{
++	int ret;
++
++	ret = i2c_smbus_write_byte_data(st->client, reg, val);
++	if (ret < 0)
++		dev_err(&st->client->dev, "write reg 0x%02x=0x%02x failed: %d\n",
++			reg, val, ret);
++	return ret;
++}
++
++static int max86900_read_reg(struct max86900_data *st, u8 reg)
++{
++	int ret = i2c_smbus_read_byte_data(st->client, reg);
++
++	if (ret < 0)
++		dev_err(&st->client->dev, "read reg 0x%02x failed: %d\n",
++			reg, ret);
++	return ret;
++}
++
++static int max86900_power_on(struct max86900_data *st)
++{
++	int ret;
++
++	if (st->vdd) {
++		ret = regulator_enable(st->vdd);
++		if (ret)
++			return ret;
++	}
++	if (st->led) {
++		ret = regulator_enable(st->led);
++		if (ret) {
++			if (st->vdd)
++				regulator_disable(st->vdd);
++			return ret;
++		}
++	}
++	msleep(15);
++	return 0;
++}
++
++static void max86900_power_off(struct max86900_data *st)
++{
++	if (st->led)
++		regulator_disable(st->led);
++	if (st->vdd)
++		regulator_disable(st->vdd);
++}
++
++static int max86900_hw_start(struct max86900_data *st)
++{
++	int ret;
++
++	ret = max86900_power_on(st);
++	if (ret)
++		return ret;
++
++	ret = max86900_write_reg(st, MAX86900_REG_MODE_CONFIG, MAX86900_MODE_RESET);
++	if (ret)
++		goto err_off;
++	usleep_range(2000, 3000);
++
++	(void)max86900_read_reg(st, MAX86900_REG_INT_STATUS);
++
++	ret = max86900_write_reg(st, MAX86900_REG_SPO2_CONFIG, MAX86900_SPO2_100HZ_400US);
++	if (ret)
++		goto err_off;
++
++	ret = max86900_write_reg(st, MAX86900_REG_LED_CONFIG, st->led_current);
++	if (ret)
++		goto err_off;
++
++	max86900_write_reg(st, MAX86900_REG_FIFO_WR_PTR, 0x00);
++	max86900_write_reg(st, MAX86900_REG_OVF_COUNTER, 0x00);
++	max86900_write_reg(st, MAX86900_REG_FIFO_RD_PTR, 0x00);
++	max86900_write_reg(st, MAX86900_REG_INT_ENABLE, 0x10);
++
++	ret = max86900_write_reg(st, MAX86900_REG_MODE_CONFIG, MAX86900_MODE_SPO2_TEMP);
++	if (ret)
++		goto err_off;
++
++	return 0;
++
++err_off:
++	max86900_power_off(st);
++	return ret;
++}
++
++static void max86900_hw_stop(struct max86900_data *st)
++{
++	max86900_write_reg(st, MAX86900_REG_INT_ENABLE, 0x00);
++	max86900_write_reg(st, MAX86900_REG_LED_CONFIG, 0x00);
++	max86900_write_reg(st, MAX86900_REG_MODE_CONFIG, MAX86900_MODE_SHDN);
++	max86900_power_off(st);
++}
++
++static int max86900_read_fifo_sample(struct max86900_data *st, u16 *ir, u16 *red)
++{
++	u8 buf[4];
++	int ret;
++
++	ret = i2c_smbus_read_i2c_block_data(st->client, MAX86900_REG_FIFO_DATA,
++					    sizeof(buf), buf);
++	if (ret < 0)
++		return ret;
++	if (ret != sizeof(buf))
++		return -EIO;
++
++	*ir = ((u16)buf[0] << 8) | buf[1];
++	*red = ((u16)buf[2] << 8) | buf[3];
++	return 0;
++}
++
++static void max86900_update_bpm(struct max86900_data *st, u16 ir, s64 now_ns)
++{
++	s32 ac;
++
++	if (ir < MAX86900_FINGER_IR_THRESH) {
++		st->dc_ir = 0;
++		st->prev_ac = 0;
++		st->prev2_ac = 0;
++		st->last_peak_ns = 0;
++		st->bpm_hist_cnt = 0;
++		st->bpm_hist_idx = 0;
++		st->last_bpm = 0;
++		return;
++	}
++
++	if (st->dc_ir == 0)
++		st->dc_ir = (s64)ir << 8;
++	else
++		st->dc_ir += (((s64)ir << 8) - st->dc_ir) >> 4;
++
++	ac = (s32)ir - (s32)(st->dc_ir >> 8);
++
++	/* Local peak detection with refractory period (300 ms .. 1500 ms -> 40..200 BPM) */
++	if (st->prev_ac > st->prev2_ac && st->prev_ac > ac && st->prev_ac > 15) {
++		if (st->last_peak_ns > 0) {
++			s64 dt_ms = div_s64(now_ns - st->last_peak_ns, 1000000);
++
++			if (dt_ms >= 300 && dt_ms <= 1500) {
++				s32 inst_bpm = (s32)div_s64(60000, dt_ms);
++				int i, sum = 0;
++
++				st->bpm_hist[st->bpm_hist_idx] = inst_bpm;
++				st->bpm_hist_idx = (st->bpm_hist_idx + 1) & 3;
++				if (st->bpm_hist_cnt < 4)
++					st->bpm_hist_cnt++;
++				for (i = 0; i < st->bpm_hist_cnt; i++)
++					sum += st->bpm_hist[i];
++				st->last_bpm = sum / st->bpm_hist_cnt;
++				st->last_peak_ns = now_ns;
++			} else if (dt_ms > 1500) {
++				st->last_peak_ns = now_ns;
++			}
++		} else {
++			st->last_peak_ns = now_ns;
++		}
++	}
++
++	st->prev2_ac = st->prev_ac;
++	st->prev_ac = ac;
++}
++
++static void max86900_poll_work(struct work_struct *work)
++{
++	struct max86900_data *st = container_of(work, struct max86900_data,
++						poll_work.work);
++	struct max86900_scan scan;
++	int wr, rd, count, i;
++	s64 now_ns;
++
++	mutex_lock(&st->lock);
++	if (!st->streaming) {
++		mutex_unlock(&st->lock);
++		return;
++	}
++
++	wr = max86900_read_reg(st, MAX86900_REG_FIFO_WR_PTR);
++	rd = max86900_read_reg(st, MAX86900_REG_FIFO_RD_PTR);
++	if (wr < 0 || rd < 0)
++		goto reschedule;
++
++	count = (wr - rd) & 0x0F;
++	if (count == 0)
++		count = 1;
++
++	now_ns = ktime_get_boottime_ns();
++	for (i = 0; i < count; i++) {
++		u16 ir = 0, red = 0;
++
++		if (max86900_read_fifo_sample(st, &ir, &red) < 0)
++			break;
++		st->last_ir = ir;
++		st->last_red = red;
++		max86900_update_bpm(st, ir, now_ns);
++	}
++
++	/* Push ~10 Hz frames into IIO kfifo */
++	memset(&scan, 0, sizeof(scan));
++	scan.bpm = st->last_bpm;
++	scan.ir = st->last_ir;
++	scan.red = st->last_red;
++	iio_push_to_buffers_with_timestamp(st->indio_dev, &scan, now_ns);
++
++reschedule:
++	if (st->streaming)
++		schedule_delayed_work(&st->poll_work, msecs_to_jiffies(40));
++	mutex_unlock(&st->lock);
++}
++
++static int max86900_buffer_postenable(struct iio_dev *indio_dev)
++{
++	struct max86900_data *st = iio_priv(indio_dev);
++	int ret;
++
++	mutex_lock(&st->lock);
++	st->dc_ir = 0;
++	st->prev_ac = 0;
++	st->prev2_ac = 0;
++	st->last_peak_ns = 0;
++	st->bpm_hist_cnt = 0;
++	st->bpm_hist_idx = 0;
++	st->last_bpm = 0;
++
++	ret = max86900_hw_start(st);
++	if (!ret) {
++		st->streaming = true;
++		schedule_delayed_work(&st->poll_work, msecs_to_jiffies(40));
++	}
++	mutex_unlock(&st->lock);
++	return ret;
++}
++
++static int max86900_buffer_predisable(struct iio_dev *indio_dev)
++{
++	struct max86900_data *st = iio_priv(indio_dev);
++
++	mutex_lock(&st->lock);
++	st->streaming = false;
++	mutex_unlock(&st->lock);
++
++	cancel_delayed_work_sync(&st->poll_work);
++
++	mutex_lock(&st->lock);
++	max86900_hw_stop(st);
++	mutex_unlock(&st->lock);
++	return 0;
++}
++
++static const struct iio_buffer_setup_ops max86900_buffer_ops = {
++	.postenable = max86900_buffer_postenable,
++	.predisable = max86900_buffer_predisable,
++};
++
++static int max86900_read_raw(struct iio_dev *indio_dev,
++			     struct iio_chan_spec const *chan,
++			     int *val, int *val2, long mask)
++{
++	struct max86900_data *st = iio_priv(indio_dev);
++	bool started_temp = false;
++	int ret = 0;
++
++	if (mask != IIO_CHAN_INFO_RAW)
++		return -EINVAL;
++
++	mutex_lock(&st->lock);
++	if (!st->streaming) {
++		ret = max86900_hw_start(st);
++		if (ret) {
++			mutex_unlock(&st->lock);
++			return ret;
++		}
++		msleep(30);
++		(void)max86900_read_fifo_sample(st, &st->last_ir, &st->last_red);
++		started_temp = true;
++	}
++
++	switch (chan->type) {
++	case IIO_COUNT:
++		*val = st->last_bpm;
++		ret = IIO_VAL_INT;
++		break;
++	case IIO_INTENSITY:
++		*val = (chan->channel2 == IIO_MOD_LIGHT_IR) ?
++		       st->last_ir : st->last_red;
++		ret = IIO_VAL_INT;
++		break;
++	case IIO_TEMP: {
++		int ti = max86900_read_reg(st, MAX86900_REG_TEMP_INT);
++		int tf = max86900_read_reg(st, MAX86900_REG_TEMP_FRAC);
++
++		if (ti < 0 || tf < 0)
++			ret = -EIO;
++		else {
++			*val = (s8)ti * 1000 + (tf & 0x0F) * 62;
++			ret = IIO_VAL_INT;
++		}
++		break;
++	}
++	default:
++		ret = -EINVAL;
++		break;
++	}
++
++	if (started_temp)
++		max86900_hw_stop(st);
++	mutex_unlock(&st->lock);
++	return ret;
++}
++
++static const struct iio_info max86900_iio_info = {
++	.read_raw = max86900_read_raw,
++};
++
++static int max86900_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct iio_dev *indio_dev;
++	struct max86900_data *st;
++	int part, rev, ret;
++
++	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
++	if (!indio_dev)
++		return -ENOMEM;
++
++	st = iio_priv(indio_dev);
++	st->client = client;
++	st->indio_dev = indio_dev;
++	st->led_current = MAX86900_DEFAULT_LED_CURR;
++	mutex_init(&st->lock);
++	INIT_DELAYED_WORK(&st->poll_work, max86900_poll_work);
++	i2c_set_clientdata(client, indio_dev);
++
++	st->vdd = devm_regulator_get_optional(dev, "vdd");
++	if (IS_ERR(st->vdd)) {
++		if (PTR_ERR(st->vdd) == -ENODEV)
++			st->vdd = NULL;
++		else
++			return dev_err_probe(dev, PTR_ERR(st->vdd), "vdd regulator\n");
++	}
++	st->led = devm_regulator_get_optional(dev, "led");
++	if (IS_ERR(st->led)) {
++		if (PTR_ERR(st->led) == -ENODEV)
++			st->led = NULL;
++		else
++			return dev_err_probe(dev, PTR_ERR(st->led), "led regulator\n");
++	}
++
++	/* Probe chip ID with rails enabled: try MAX86900A/B/C (0x57) first, then MAX86900 (0x51) */
++	ret = max86900_power_on(st);
++	if (ret)
++		return ret;
++
++	client->addr = 0x57;
++	rev = i2c_smbus_read_byte_data(client, MAX86900_REG_REV_ID);
++	part = i2c_smbus_read_byte_data(client, MAX86900_REG_PART_ID);
++	if (rev < 0 || part < 0 || part != 0x11) {
++		client->addr = 0x51;
++		rev = i2c_smbus_read_byte_data(client, MAX86900_REG_REV_ID);
++		part = i2c_smbus_read_byte_data(client, MAX86900_REG_PART_ID);
++	}
++	if (rev >= 0 && part >= 0) {
++		if (client->addr == 0x57 && rev == 0x05)
++			st->led_current = 0x0F;
++		else if (client->addr == 0x57)
++			st->led_current = 0x55;
++		max86900_write_reg(st, MAX86900_REG_MODE_CONFIG, MAX86900_MODE_SHDN);
++	}
++	max86900_power_off(st);
++
++	if (rev < 0 || part < 0)
++		return dev_err_probe(dev, rev < 0 ? rev : part,
++				     "failed to read MAX86900 ID at 0x57/0x51\n");
++
++	st->rev_id = rev;
++	st->part_id = part;
++	dev_info(dev, "MAX86900 detected at 0x%02x (part=0x%02x, rev=0x%02x, led=0x%02x)\n", client->addr,
++		 st->part_id, st->rev_id, st->led_current);
++
++	indio_dev->name = "max86900-hrm";
++	indio_dev->modes = INDIO_DIRECT_MODE;
++	indio_dev->channels = max86900_channels;
++	indio_dev->num_channels = ARRAY_SIZE(max86900_channels);
++	indio_dev->info = &max86900_iio_info;
++
++	ret = iio_device_set_clock(indio_dev, CLOCK_BOOTTIME);
++	if (ret)
++		return ret;
++
++	ret = devm_iio_kfifo_buffer_setup(dev, indio_dev, &max86900_buffer_ops);
++	if (ret)
++		return ret;
++
++	return devm_iio_device_register(dev, indio_dev);
++}
++
++static void max86900_remove(struct i2c_client *client)
++{
++	struct iio_dev *indio_dev = i2c_get_clientdata(client);
++	struct max86900_data *st = iio_priv(indio_dev);
++
++	mutex_lock(&st->lock);
++	st->streaming = false;
++	mutex_unlock(&st->lock);
++	cancel_delayed_work_sync(&st->poll_work);
++}
++
++static const struct of_device_id max86900_of_match[] = {
++	{ .compatible = "maxim,max86900" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, max86900_of_match);
++
++static const struct i2c_device_id max86900_id[] = {
++	{ "max86900", 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, max86900_id);
++
++static struct i2c_driver max86900_driver = {
++	.driver = {
++		.name = "max86900",
++		.of_match_table = max86900_of_match,
++	},
++	.probe = max86900_probe,
++	.remove = max86900_remove,
++	.id_table = max86900_id,
++};
++module_i2c_driver(max86900_driver);
++
++MODULE_DESCRIPTION("Maxim MAX86900 Optical Heart-Rate & SpO2 IIO Driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/nfc/Kconfig b/drivers/nfc/Kconfig
+index 288c6f1c6..bb58ed507 100644
+--- a/drivers/nfc/Kconfig
++++ b/drivers/nfc/Kconfig
+@@ -70,4 +70,11 @@ source "drivers/nfc/st-nci/Kconfig"
+ source "drivers/nfc/nxp-nci/Kconfig"
+ source "drivers/nfc/s3fwrn5/Kconfig"
+ source "drivers/nfc/st95hf/Kconfig"
++config SEC_NFC_I2C
++	tristate "Samsung S3FWRN5 NFC I2C char driver (/dev/sec-nfc)"
++	depends on I2C
++	help
++	  Say Y or M here to enable Samsung's /dev/sec-nfc I2C character
++	  device driver for S3FWRN5 NFC controllers on Exynos 7420.
++
+ endmenu
+diff --git a/drivers/nfc/Makefile b/drivers/nfc/Makefile
+index 7b1bfde1d..e95599120 100644
+--- a/drivers/nfc/Makefile
++++ b/drivers/nfc/Makefile
+@@ -18,3 +18,4 @@ obj-$(CONFIG_NFC_NXP_NCI)	+= nxp-nci/
+ obj-$(CONFIG_NFC_S3FWRN5)	+= s3fwrn5/
+ obj-$(CONFIG_NFC_ST95HF)	+= st95hf/
+ obj-$(CONFIG_NFC_VIRTUAL_NCI)	+= virtual_ncidev.o
++obj-$(CONFIG_SEC_NFC_I2C) += sec_nfc.o
+diff --git a/drivers/nfc/sec_nfc.c b/drivers/nfc/sec_nfc.c
+new file mode 100755
+index 000000000..1168c05ef
+--- /dev/null
++++ b/drivers/nfc/sec_nfc.c
+@@ -0,0 +1,519 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Samsung S3FWRN5 (N5) NFC Controller I2C Char Driver (/dev/sec-nfc)
++ * Ported for Samsung Galaxy S6 (Exynos 7420 / zeroflte) on Linux 6.6.
++ */
++
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/fs.h>
++#include <linux/gpio/consumer.h>
++#include <linux/i2c.h>
++#include <linux/interrupt.h>
++#include <linux/ioctl.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++#include <linux/wait.h>
++
++#define SEC_NFC_DRIVER_NAME	"sec-nfc"
++#define SEC_NFC_MAX_BUFFER_SIZE	512
++#define SEC_NFC_MSG_MAX_SIZE	(256 + 4)
++#define SEC_NFC_VEN_WAIT_TIME	100
++
++/* Match universal7420-common/hardware/nfc/halimpl/include/sec_nfc.h */
++#define SEC_NFC_MAGIC		'S'
++#define SEC_NFC_GET_MODE	_IOW(SEC_NFC_MAGIC, 0, unsigned int)
++#define SEC_NFC_SET_MODE	_IOW(SEC_NFC_MAGIC, 1, unsigned int)
++#define SEC_NFC_SLEEP		_IOW(SEC_NFC_MAGIC, 2, unsigned int)
++#define SEC_NFC_WAKEUP		_IOW(SEC_NFC_MAGIC, 3, unsigned int)
++#define SEC_NFC_SET_NPT_MODE	_IOW(SEC_NFC_MAGIC, 4, unsigned int)
++
++enum sec_nfc_mode {
++	SEC_NFC_MODE_OFF = 0,
++	SEC_NFC_MODE_FIRMWARE,
++	SEC_NFC_MODE_BOOTLOADER,
++	SEC_NFC_MODE_COUNT,
++};
++
++enum sec_nfc_irq_state {
++	SEC_NFC_NONE = 0,
++	SEC_NFC_INT,
++	SEC_NFC_SKIP,
++};
++
++/* S3FWRN5 (N5): VEN is active-low (0 = ON, 1 = OFF) */
++#define SEC_NFC_PW_ON		0
++#define SEC_NFC_PW_OFF		1
++#define SEC_NFC_FW_OFF		0
++#define SEC_NFC_FW_ON		1
++#define SEC_NFC_WAKE_SLEEP	0
++#define SEC_NFC_WAKE_UP		1
++
++#define SEC_NFC_NPT_CMD_ON	0x7E
++#define SEC_NFC_NPT_CMD_OFF	0x7F
++
++struct sec_nfc_info {
++	struct miscdevice miscdev;
++	struct i2c_client *client;
++	struct device *dev;
++	struct mutex mutex;
++	struct mutex read_mutex;
++	wait_queue_head_t read_wait;
++
++	struct gpio_desc *ven_gpio;
++	struct gpio_desc *firm_gpio;
++	struct gpio_desc *irq_gpio;
++	struct gpio_desc *clk_req_gpio;
++	struct regulator *vdd;
++	struct clk *clk;
++
++	int clk_req_irq;
++	bool clk_ctl;
++	bool clk_state;
++	bool irq_wake_enabled;
++
++	enum sec_nfc_mode mode;
++	enum sec_nfc_irq_state read_irq;
++	u8 *buf;
++};
++
++static irqreturn_t sec_nfc_irq_thread_fn(int irq, void *dev_id)
++{
++	struct sec_nfc_info *info = dev_id;
++
++	mutex_lock(&info->read_mutex);
++	if (info->read_irq == SEC_NFC_SKIP) {
++		mutex_unlock(&info->read_mutex);
++		return IRQ_HANDLED;
++	}
++	info->read_irq = SEC_NFC_INT;
++	mutex_unlock(&info->read_mutex);
++
++	wake_up_interruptible(&info->read_wait);
++	return IRQ_HANDLED;
++}
++
++static void sec_nfc_apply_clk_state(struct sec_nfc_info *info)
++{
++	bool req;
++
++	if (!info->clk || !info->clk_req_gpio)
++		return;
++
++	req = gpiod_get_value_cansleep(info->clk_req_gpio) > 0;
++	if (req == info->clk_state)
++		return;
++
++	if (req) {
++		if (!clk_prepare_enable(info->clk))
++			info->clk_state = true;
++	} else {
++		clk_disable_unprepare(info->clk);
++		info->clk_state = false;
++	}
++}
++
++static irqreturn_t sec_nfc_clk_irq_thread(int irq, void *dev_id)
++{
++	struct sec_nfc_info *info = dev_id;
++
++	sec_nfc_apply_clk_state(info);
++	return IRQ_HANDLED;
++}
++
++static void sec_nfc_clk_ctl_enable(struct sec_nfc_info *info)
++{
++	int ret;
++
++	if (info->clk_ctl || !info->clk || !info->clk_req_gpio || info->clk_req_irq <= 0)
++		return;
++
++	info->clk_state = false;
++	ret = request_threaded_irq(info->clk_req_irq, NULL, sec_nfc_clk_irq_thread,
++				   IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
++				   "sec-nfc-clk", info);
++	if (ret < 0) {
++		dev_err(info->dev, "failed to request clk_req irq %d: %d\n",
++			info->clk_req_irq, ret);
++		return;
++	}
++	info->clk_ctl = true;
++	sec_nfc_apply_clk_state(info);
++}
++
++static void sec_nfc_clk_ctl_disable(struct sec_nfc_info *info)
++{
++	if (!info->clk_ctl)
++		return;
++
++	free_irq(info->clk_req_irq, info);
++	if (info->clk_state && info->clk) {
++		clk_disable_unprepare(info->clk);
++		info->clk_state = false;
++	}
++	info->clk_ctl = false;
++}
++
++static void sec_nfc_set_mode(struct sec_nfc_info *info, enum sec_nfc_mode mode)
++{
++	if (info->mode == mode)
++		return;
++
++	info->mode = mode;
++
++	mutex_lock(&info->read_mutex);
++	info->read_irq = SEC_NFC_SKIP;
++	mutex_unlock(&info->read_mutex);
++
++	gpiod_set_value_cansleep(info->ven_gpio, SEC_NFC_PW_OFF);
++	if (info->firm_gpio)
++		gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_FW_OFF);
++
++	if (mode == SEC_NFC_MODE_BOOTLOADER && info->firm_gpio)
++		gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_FW_ON);
++
++	if (mode != SEC_NFC_MODE_OFF) {
++		msleep(SEC_NFC_VEN_WAIT_TIME);
++		gpiod_set_value_cansleep(info->ven_gpio, SEC_NFC_PW_ON);
++		sec_nfc_clk_ctl_enable(info);
++		if (!info->irq_wake_enabled && info->client->irq > 0) {
++			enable_irq_wake(info->client->irq);
++			info->irq_wake_enabled = true;
++		}
++		msleep(SEC_NFC_VEN_WAIT_TIME / 2);
++	} else {
++		sec_nfc_clk_ctl_disable(info);
++		if (info->irq_wake_enabled && info->client->irq > 0) {
++			disable_irq_wake(info->client->irq);
++			info->irq_wake_enabled = false;
++		}
++		mutex_lock(&info->read_mutex);
++		info->read_irq = SEC_NFC_NONE;
++		mutex_unlock(&info->read_mutex);
++	}
++}
++
++static ssize_t sec_nfc_read(struct file *file, char __user *buf,
++			    size_t count, loff_t *ppos)
++{
++	struct sec_nfc_info *info = container_of(file->private_data,
++						 struct sec_nfc_info, miscdev);
++	enum sec_nfc_irq_state irq;
++	int ret;
++
++	mutex_lock(&info->mutex);
++	if (info->mode == SEC_NFC_MODE_OFF) {
++		ret = -ENODEV;
++		goto out;
++	}
++
++	mutex_lock(&info->read_mutex);
++	irq = info->read_irq;
++	mutex_unlock(&info->read_mutex);
++
++	if (irq == SEC_NFC_NONE && (file->f_flags & O_NONBLOCK)) {
++		ret = -EAGAIN;
++		goto out;
++	}
++
++	if (count > SEC_NFC_MSG_MAX_SIZE) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	mutex_lock(&info->read_mutex);
++	memset(info->buf, 0, count);
++	ret = i2c_master_recv(info->client, info->buf, count);
++	info->read_irq = SEC_NFC_NONE;
++	mutex_unlock(&info->read_mutex);
++
++	if (ret == -EREMOTEIO) {
++		ret = -ERESTART;
++		goto out;
++	}
++	if (ret != count)
++		goto out;
++
++	if (copy_to_user(buf, info->buf, ret))
++		ret = -EFAULT;
++
++out:
++	mutex_unlock(&info->mutex);
++	return ret;
++}
++
++static ssize_t sec_nfc_write(struct file *file, const char __user *buf,
++			     size_t count, loff_t *ppos)
++{
++	struct sec_nfc_info *info = container_of(file->private_data,
++						 struct sec_nfc_info, miscdev);
++	int ret;
++
++	mutex_lock(&info->mutex);
++	if (info->mode == SEC_NFC_MODE_OFF) {
++		ret = -ENODEV;
++		goto out;
++	}
++	if (count > SEC_NFC_MSG_MAX_SIZE) {
++		ret = -EINVAL;
++		goto out;
++	}
++	if (copy_from_user(info->buf, buf, count)) {
++		ret = -EFAULT;
++		goto out;
++	}
++
++	mutex_lock(&info->read_mutex);
++	ret = i2c_master_send(info->client, info->buf, count);
++	if (info->read_irq == SEC_NFC_SKIP)
++		info->read_irq = SEC_NFC_NONE;
++	mutex_unlock(&info->read_mutex);
++
++	if (ret == -EREMOTEIO)
++		ret = -ERESTART;
++	else if (ret != count)
++		ret = -EREMOTEIO;
++
++out:
++	mutex_unlock(&info->mutex);
++	return ret;
++}
++
++static __poll_t sec_nfc_poll(struct file *file, poll_table *wait)
++{
++	struct sec_nfc_info *info = container_of(file->private_data,
++						 struct sec_nfc_info, miscdev);
++	__poll_t mask = 0;
++
++	mutex_lock(&info->mutex);
++	if (info->mode == SEC_NFC_MODE_OFF) {
++		mutex_unlock(&info->mutex);
++		return EPOLLERR;
++	}
++	poll_wait(file, &info->read_wait, wait);
++
++	mutex_lock(&info->read_mutex);
++	if (info->read_irq == SEC_NFC_INT)
++		mask = EPOLLIN | EPOLLRDNORM;
++	mutex_unlock(&info->read_mutex);
++
++	mutex_unlock(&info->mutex);
++	return mask;
++}
++
++static long sec_nfc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
++{
++	struct sec_nfc_info *info = container_of(file->private_data,
++						 struct sec_nfc_info, miscdev);
++	unsigned int new_mode = (unsigned int)arg;
++	long ret = 0;
++
++	mutex_lock(&info->mutex);
++	switch (cmd) {
++	case SEC_NFC_SET_MODE:
++		if (new_mode >= SEC_NFC_MODE_COUNT) {
++			ret = -EINVAL;
++			break;
++		}
++		sec_nfc_set_mode(info, new_mode);
++		break;
++	case SEC_NFC_GET_MODE:
++		ret = info->mode;
++		break;
++	case SEC_NFC_SLEEP:
++		if (info->mode != SEC_NFC_MODE_BOOTLOADER && info->firm_gpio)
++			gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_WAKE_SLEEP);
++		break;
++	case SEC_NFC_WAKEUP:
++		if (info->mode != SEC_NFC_MODE_BOOTLOADER && info->firm_gpio)
++			gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_WAKE_UP);
++		break;
++	case SEC_NFC_SET_NPT_MODE:
++		if (new_mode == SEC_NFC_NPT_CMD_ON) {
++			info->mode = SEC_NFC_MODE_FIRMWARE;
++			mutex_lock(&info->read_mutex);
++			info->read_irq = SEC_NFC_SKIP;
++			mutex_unlock(&info->read_mutex);
++			gpiod_set_value_cansleep(info->ven_gpio, SEC_NFC_PW_ON);
++			sec_nfc_clk_ctl_enable(info);
++			if (info->firm_gpio)
++				gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_FW_ON);
++		} else if (new_mode == SEC_NFC_NPT_CMD_OFF) {
++			info->mode = SEC_NFC_MODE_OFF;
++			if (info->firm_gpio)
++				gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_FW_OFF);
++			gpiod_set_value_cansleep(info->ven_gpio, SEC_NFC_PW_OFF);
++			sec_nfc_clk_ctl_disable(info);
++		}
++		break;
++	default:
++		ret = -EINVAL;
++		break;
++	}
++	mutex_unlock(&info->mutex);
++	return ret;
++}
++
++static int sec_nfc_open(struct inode *inode, struct file *file)
++{
++	struct sec_nfc_info *info = container_of(file->private_data,
++						 struct sec_nfc_info, miscdev);
++	int ret = 0;
++
++	mutex_lock(&info->mutex);
++	if (info->mode != SEC_NFC_MODE_OFF)
++		ret = -EBUSY;
++	else
++		sec_nfc_set_mode(info, SEC_NFC_MODE_OFF);
++	mutex_unlock(&info->mutex);
++	return ret;
++}
++
++static int sec_nfc_close(struct inode *inode, struct file *file)
++{
++	struct sec_nfc_info *info = container_of(file->private_data,
++						 struct sec_nfc_info, miscdev);
++
++	mutex_lock(&info->mutex);
++	sec_nfc_set_mode(info, SEC_NFC_MODE_OFF);
++	mutex_unlock(&info->mutex);
++	return 0;
++}
++
++static const struct file_operations sec_nfc_fops = {
++	.owner = THIS_MODULE,
++	.read = sec_nfc_read,
++	.write = sec_nfc_write,
++	.poll = sec_nfc_poll,
++	.open = sec_nfc_open,
++	.release = sec_nfc_close,
++	.unlocked_ioctl = sec_nfc_ioctl,
++	.compat_ioctl = sec_nfc_ioctl,
++};
++
++static int sec_nfc_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct sec_nfc_info *info;
++	int ret;
++
++	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
++	if (!info)
++		return -ENOMEM;
++
++	info->buf = devm_kzalloc(dev, SEC_NFC_MAX_BUFFER_SIZE, GFP_KERNEL);
++	if (!info->buf)
++		return -ENOMEM;
++
++	info->client = client;
++	info->dev = dev;
++	info->mode = SEC_NFC_MODE_OFF;
++	info->read_irq = SEC_NFC_NONE;
++	mutex_init(&info->mutex);
++	mutex_init(&info->read_mutex);
++	init_waitqueue_head(&info->read_wait);
++	i2c_set_clientdata(client, info);
++
++	info->vdd = devm_regulator_get_optional(dev, "vdd");
++	if (IS_ERR(info->vdd)) {
++		if (PTR_ERR(info->vdd) == -ENODEV)
++			info->vdd = NULL;
++		else
++			return dev_err_probe(dev, PTR_ERR(info->vdd), "vdd supply\n");
++	}
++	if (info->vdd) {
++		ret = regulator_enable(info->vdd);
++		if (ret)
++			return ret;
++	}
++
++	/* VEN starts OFF (HIGH on S3FWRN5) */
++	info->ven_gpio = devm_gpiod_get(dev, "ven", GPIOD_OUT_HIGH);
++	if (IS_ERR(info->ven_gpio))
++		return dev_err_probe(dev, PTR_ERR(info->ven_gpio), "ven gpio\n");
++
++	info->firm_gpio = devm_gpiod_get_optional(dev, "firm", GPIOD_OUT_LOW);
++	if (IS_ERR(info->firm_gpio))
++		return dev_err_probe(dev, PTR_ERR(info->firm_gpio), "firm gpio\n");
++
++	info->irq_gpio = devm_gpiod_get_optional(dev, "irq", GPIOD_IN);
++	if (IS_ERR(info->irq_gpio))
++		return dev_err_probe(dev, PTR_ERR(info->irq_gpio), "irq gpio\n");
++
++	info->clk_req_gpio = devm_gpiod_get_optional(dev, "clk-req", GPIOD_IN);
++	if (IS_ERR(info->clk_req_gpio))
++		return dev_err_probe(dev, PTR_ERR(info->clk_req_gpio), "clk-req gpio\n");
++
++	if (info->clk_req_gpio)
++		info->clk_req_irq = gpiod_to_irq(info->clk_req_gpio);
++
++	info->clk = devm_clk_get_optional(dev, "sclk_isp_sensor1");
++	if (IS_ERR(info->clk))
++		return dev_err_probe(dev, PTR_ERR(info->clk), "nfc clock\n");
++
++	if (client->irq > 0) {
++		ret = devm_request_threaded_irq(dev, client->irq, NULL,
++						sec_nfc_irq_thread_fn,
++						IRQF_TRIGGER_RISING | IRQF_ONESHOT,
++						SEC_NFC_DRIVER_NAME, info);
++		if (ret)
++			return dev_err_probe(dev, ret, "request nfc irq\n");
++	}
++
++	info->miscdev.minor = MISC_DYNAMIC_MINOR;
++	info->miscdev.name = SEC_NFC_DRIVER_NAME;
++	info->miscdev.fops = &sec_nfc_fops;
++	info->miscdev.parent = dev;
++
++	ret = misc_register(&info->miscdev);
++	if (ret)
++		return dev_err_probe(dev, ret, "misc_register\n");
++
++	dev_info(dev, "Samsung S3FWRN5 NFC (/dev/%s) ready at 0x%02x (irq=%d, clk_req_irq=%d)\n",
++		 SEC_NFC_DRIVER_NAME, client->addr, client->irq, info->clk_req_irq);
++	return 0;
++}
++
++static void sec_nfc_remove(struct i2c_client *client)
++{
++	struct sec_nfc_info *info = i2c_get_clientdata(client);
++
++	misc_deregister(&info->miscdev);
++	mutex_lock(&info->mutex);
++	sec_nfc_set_mode(info, SEC_NFC_MODE_OFF);
++	mutex_unlock(&info->mutex);
++	if (info->vdd)
++		regulator_disable(info->vdd);
++}
++
++static const struct of_device_id sec_nfc_of_match[] = {
++	{ .compatible = "samsung,sec-nfc" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, sec_nfc_of_match);
++
++static const struct i2c_device_id sec_nfc_id[] = {
++	{ SEC_NFC_DRIVER_NAME, 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, sec_nfc_id);
++
++static struct i2c_driver sec_nfc_driver = {
++	.driver = {
++		.name = SEC_NFC_DRIVER_NAME,
++		.of_match_table = sec_nfc_of_match,
++	},
++	.probe = sec_nfc_probe,
++	.remove = sec_nfc_remove,
++	.id_table = sec_nfc_id,
++};
++module_i2c_driver(sec_nfc_driver);
++
++MODULE_DESCRIPTION("Samsung S3FWRN5 NFC Controller Driver (/dev/sec-nfc)");
++MODULE_LICENSE("GPL");

@@ -1,0 +1,16 @@
+on post-fs-data
+    chown system system /sys/class/sensors/irled_remote/irled_send
+    chmod 0664 /sys/class/sensors/irled_remote/irled_send
+    chown system system /sys/class/sensors/irled_remote/irled_send_result
+    chmod 0444 /sys/class/sensors/irled_remote/irled_send_result
+
+on boot
+    chown system system /sys/class/sensors/irled_remote/irled_send
+    chmod 0664 /sys/class/sensors/irled_remote/irled_send
+    chown system system /sys/class/sensors/irled_remote/irled_send_result
+    chmod 0444 /sys/class/sensors/irled_remote/irled_send_result
+
+service vendor.ir-hal /vendor/bin/hw/android.hardware.ir-service.universal7420
+    class hal
+    user system
+    group system
