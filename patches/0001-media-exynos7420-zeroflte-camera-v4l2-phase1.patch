@@ -65,7 +65,7 @@ index 3517cb3ff..1be4a5ced 100644
  		 * Front camera path: CSIS1 -> FIMC-LITE B (FIMC-BNS B). The
  		 * receiver of each pair sits below its FIMC-LITE: CSIS0/1 at
 diff --git a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
-index c628180d4..0b7d55376 100644
+index c628180d4..6f16c471a 100644
 --- a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
 +++ b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
 @@ -131,6 +131,18 @@ trustzone@fe800000 {
@@ -128,10 +128,63 @@ index c628180d4..0b7d55376 100644
   */
  &cmu_cam0 {
  	assigned-clocks = <&cmu_cam0 CLK_MOUT_USER_ACLK_CAM0_CSIS0_690>,
-@@ -2727,5 +2764,92 @@ companion@3d {
+@@ -2635,6 +2672,18 @@ cam_mclk2_on: cam-mclk2-on-pins {
+ 		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+ 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+ 	};
++
++	cam_i2c2_pins: cam-i2c2-pins {
++		samsung,pins = "gpc2-4", "gpc2-5";
++		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
++	};
++
++	/* HSI2C11 shares the AF/OIS bus on PCB; hold Hi-Z while cam_i2c2 bit-bangs. */
++	ois_hsi2c_idle: ois-hsi2c-idle-pins {
++		samsung,pins = "gpb0-2", "gpb0-3";
++		samsung,pin-function = <EXYNOS_PIN_FUNC_INPUT>;
++		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
++	};
+ };
+ 
+ / {
+@@ -2660,6 +2709,32 @@ cam_i2c1: i2c-cam1 {
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 	};
++
++	cam_i2c2: i2c-cam2 {
++		compatible = "i2c-gpio";
++		sda-gpios = <&gpc2 4 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
++		scl-gpios = <&gpc2 5 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
++		i2c-gpio,delay-us = <2>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_i2c2_pins &ois_hsi2c_idle>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		rear_af: af@c {
++			compatible = "asahi-kasei,ak7345";
++			reg = <0x0c>;
++			vdd-supply = <&cam_vddaf>;
++			vio-supply = <&cam_vddio>;
++		};
++
++		rear_ois: ois@24 {
++			compatible = "invensense,idg2030";
++			reg = <0x24>;
++			vddio-supply = <&cam_vddio>;
++			ois-vdd-supply = <&cam_ois_vdd>;
++			ois-vm-supply = <&cam_ois_vm>;
++		};
++	};
+ };
+ 
+ /*
+@@ -2727,5 +2802,93 @@ companion@3d {
  		pinctrl-1 = <&cam_mclk01_on>;
  		reset-gpios = <&gpc0 7 GPIO_ACTIVE_LOW>;
  		sensor-reset-gpios = <&gpc0 5 GPIO_ACTIVE_LOW>;
++		lens-focus = <&rear_af>;
 +		orientation = <1>;
 +		rotation = <0>;
 +
@@ -163,8 +216,8 @@ index c628180d4..0b7d55376 100644
 +		reg = <0x140e0000 0x1000>;
 +		/* Shared by BNS A and BNS B; left disabled for IOMMU, bypassed by flite. */
 +		status = "disabled";
- 	};
- };
++	};
++};
 +
 +&fimc_lite_a {
 +	memory-region = <&cam_cma>;
@@ -200,8 +253,8 @@ index c628180d4..0b7d55376 100644
 +				link-frequencies = /bits/ 64 <504000000>;
 +			};
 +		};
-+	};
-+};
+ 	};
+ };
 +
 +&csis1 {
 +	status = "okay";
@@ -222,10 +275,10 @@ index c628180d4..0b7d55376 100644
 +	status = "okay";
 +};
 diff --git a/arch/arm64/configs/zeroflte_gki.fragment b/arch/arm64/configs/zeroflte_gki.fragment
-index 42db70ea5..8fd70540c 100644
+index 42db70ea5..5c337273b 100644
 --- a/arch/arm64/configs/zeroflte_gki.fragment
 +++ b/arch/arm64/configs/zeroflte_gki.fragment
-@@ -372,12 +372,16 @@ CONFIG_GKI_HIDDEN_DMA_CONFIGS=y
+@@ -372,12 +372,18 @@ CONFIG_GKI_HIDDEN_DMA_CONFIGS=y
  # CONFIG_SCSI_UFSHCD_PCI is not set
  # CONFIG_SND_PCI is not set
  
@@ -242,6 +295,8 @@ index 42db70ea5..8fd70540c 100644
 +CONFIG_VIDEO_CAMERA_SENSOR=y
  CONFIG_VIDEO_S5C73C2=m
 +CONFIG_VIDEO_S5K4E6=m
++CONFIG_VIDEO_AK7375=m
++CONFIG_VIDEO_IDG2030=m
  CONFIG_VIDEO_IMX_MIPI_CSIS=m
  CONFIG_VIDEO_EXYNOS7_FLITE=m
 +CONFIG_CMA_SIZE_MBYTES=32
@@ -277,7 +332,7 @@ index ed8fe1d9d..942e44040 100644
  
  CLK_OF_DECLARE(exynos7_clk_top0, "samsung,exynos7-clock-top0",
 diff --git a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
-index 02a509f4f..8981a3ae4 100644
+index 02a509f4f..b867993f7 100644
 --- a/drivers/media/i2c/Kconfig
 +++ b/drivers/media/i2c/Kconfig
 @@ -5,9 +5,12 @@
@@ -311,11 +366,50 @@ index 02a509f4f..8981a3ae4 100644
  config VIDEO_S5K6A3
  	tristate "Samsung S5K6A3 sensor support"
  	help
+@@ -645,16 +658,25 @@ config VIDEO_AD5820
+ 	  It is used for example in Nokia N900 (RX-51).
+ 
+ config VIDEO_AK7375
+-	tristate "AK7375 lens voice coil support"
++	tristate "AK7375 / AK7345 lens voice coil support"
+ 	depends on I2C && VIDEO_DEV
+ 	select MEDIA_CONTROLLER
+ 	select VIDEO_V4L2_SUBDEV_API
+ 	select V4L2_ASYNC
+ 	help
+-	  This is a driver for the AK7375 camera lens voice coil.
+-	  AK7375 is a 12 bit DAC with 120mA output current sink
+-	  capability. This is designed for linear control of
+-	  voice coil motors, controlled via I2C serial interface.
++	  This is a driver for the AK7375/AK7345 camera lens voice coil.
++	  AK7375 is a 12 bit DAC and AK7345 is a 9 bit DAC with 120mA
++	  output current sink capability. This is designed for linear
++	  control of voice coil motors, controlled via I2C serial
++	  interface.
++
++config VIDEO_IDG2030
++	tristate "InvenSense IDG2030 OIS companion support"
++	depends on I2C && REGULATOR_S2MPB02
++	help
++	  This is a lightweight driver for the InvenSense IDG2030 optical
++	  image stabilization (OIS) IC found on Samsung Galaxy S6 rear
++	  camera modules.
+ 
+ config VIDEO_DW9714
+ 	tristate "DW9714 lens voice coil support"
 diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
-index 8bc516902..9142dd1be 100644
+index 8bc516902..b71a9912b 100644
 --- a/drivers/media/i2c/Makefile
 +++ b/drivers/media/i2c/Makefile
-@@ -109,6 +109,7 @@ obj-$(CONFIG_VIDEO_RDACM21) += rdacm21.o
+@@ -40,6 +40,7 @@ obj-$(CONFIG_VIDEO_HI556) += hi556.o
+ obj-$(CONFIG_VIDEO_HI846) += hi846.o
+ obj-$(CONFIG_VIDEO_HI847) += hi847.o
+ obj-$(CONFIG_VIDEO_I2C) += video-i2c.o
++obj-$(CONFIG_VIDEO_IDG2030) += idg2030.o
+ obj-$(CONFIG_VIDEO_IMX208) += imx208.o
+ obj-$(CONFIG_VIDEO_IMX214) += imx214.o
+ obj-$(CONFIG_VIDEO_IMX219) += imx219.o
+@@ -109,6 +110,7 @@ obj-$(CONFIG_VIDEO_RDACM21) += rdacm21.o
  obj-$(CONFIG_VIDEO_RJ54N1) += rj54n1cb0c.o
  obj-$(CONFIG_VIDEO_S5C73C2) += s5c73c2.o
  obj-$(CONFIG_VIDEO_S5C73M3) += s5c73m3/
@@ -323,8 +417,498 @@ index 8bc516902..9142dd1be 100644
  obj-$(CONFIG_VIDEO_S5K5BAF) += s5k5baf.o
  obj-$(CONFIG_VIDEO_S5K6A3) += s5k6a3.o
  obj-$(CONFIG_VIDEO_SAA6588) += saa6588.o
+diff --git a/drivers/media/i2c/ak7375.c b/drivers/media/i2c/ak7375.c
+index 463b51d46..4920682dd 100644
+--- a/drivers/media/i2c/ak7375.c
++++ b/drivers/media/i2c/ak7375.c
+@@ -6,35 +6,51 @@
+ #include <linux/i2c.h>
+ #include <linux/module.h>
+ #include <linux/pm_runtime.h>
++#include <linux/property.h>
+ #include <linux/regulator/consumer.h>
+ #include <media/v4l2-ctrls.h>
+ #include <media/v4l2-device.h>
+ 
+-#define AK7375_MAX_FOCUS_POS	4095
+-/*
+- * This sets the minimum granularity for the focus positions.
+- * A value of 1 gives maximum accuracy for a desired focus position
+- */
+-#define AK7375_FOCUS_STEPS	1
+-/*
+- * This acts as the minimum granularity of lens movement.
+- * Keep this value power of 2, so the control steps can be
+- * uniformly adjusted for gradual lens movement, with desired
+- * number of control steps.
+- */
+-#define AK7375_CTRL_STEPS	64
+ #define AK7375_CTRL_DELAY_US	1000
+ /*
+  * The vcm may take up 10 ms (tDELAY) to power on and start taking
+  * I2C messages. Based on AK7371 datasheet.
+  */
+-#define AK7375_POWER_DELAY_US	10000
+-
+ #define AK7375_REG_POSITION	0x0
+ #define AK7375_REG_CONT		0x2
+ #define AK7375_MODE_ACTIVE	0x0
+ #define AK7375_MODE_STANDBY	0x40
+ 
++struct ak73xx_chipdef {
++	u16 max_focus_pos;
++	u8 shift_pos;
++	u8 ctrl_steps;
++	u32 power_delay_us;
++	bool split_pos_writes;
++};
++
++static const struct ak73xx_chipdef ak7375_chipdef = {
++	.max_focus_pos = 4095,
++	.shift_pos = 4,
++	/*
++	 * This acts as the minimum granularity of lens movement.
++	 * Keep this value power of 2, so the control steps can be
++	 * uniformly adjusted for gradual lens movement, with desired
++	 * number of control steps.
++	 */
++	.ctrl_steps = 64,
++	.power_delay_us = 10000,
++	.split_pos_writes = false,
++};
++
++static const struct ak73xx_chipdef ak7345_chipdef = {
++	.max_focus_pos = 511,
++	.shift_pos = 7,
++	.ctrl_steps = 32,
++	.power_delay_us = 20000,
++	.split_pos_writes = true,
++};
++
+ static const char * const ak7375_supply_names[] = {
+ 	"vdd",
+ 	"vio",
+@@ -45,6 +61,7 @@ struct ak7375_device {
+ 	struct v4l2_ctrl_handler ctrls_vcm;
+ 	struct v4l2_subdev sd;
+ 	struct v4l2_ctrl *focus;
++	const struct ak73xx_chipdef *chip;
+ 	struct regulator_bulk_data supplies[ARRAY_SIZE(ak7375_supply_names)];
+ 
+ 	/* active or standby mode */
+@@ -83,13 +100,28 @@ static int ak7375_i2c_write(struct ak7375_device *ak7375,
+ 	return 0;
+ }
+ 
++static int ak7375_write_pos(struct ak7375_device *dev_vcm, u16 pos)
++{
++	u16 encoded = pos << dev_vcm->chip->shift_pos;
++
++	if (dev_vcm->chip->split_pos_writes) {
++		int ret = ak7375_i2c_write(dev_vcm, AK7375_REG_POSITION,
++					   (encoded >> 8) & 0xff, 1);
++		if (ret)
++			return ret;
++		return ak7375_i2c_write(dev_vcm, AK7375_REG_POSITION + 1,
++					encoded & 0xff, 1);
++	}
++
++	return ak7375_i2c_write(dev_vcm, AK7375_REG_POSITION, encoded, 2);
++}
++
+ static int ak7375_set_ctrl(struct v4l2_ctrl *ctrl)
+ {
+ 	struct ak7375_device *dev_vcm = to_ak7375_vcm(ctrl);
+ 
+ 	if (ctrl->id == V4L2_CID_FOCUS_ABSOLUTE)
+-		return ak7375_i2c_write(dev_vcm, AK7375_REG_POSITION,
+-					ctrl->val << 4, 2);
++		return ak7375_write_pos(dev_vcm, ctrl->val);
+ 
+ 	return -EINVAL;
+ }
+@@ -131,8 +163,11 @@ static int ak7375_init_controls(struct ak7375_device *dev_vcm)
+ 
+ 	v4l2_ctrl_handler_init(hdl, 1);
+ 
++	/*
++	 * Focus steps of 1 give maximum accuracy for a desired focus position.
++	 */
+ 	dev_vcm->focus = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_FOCUS_ABSOLUTE,
+-		0, AK7375_MAX_FOCUS_POS, AK7375_FOCUS_STEPS, 0);
++		0, dev_vcm->chip->max_focus_pos, 1, 0);
+ 
+ 	if (hdl->error)
+ 		dev_err(dev_vcm->sd.dev, "%s fail error: 0x%x\n",
+@@ -153,6 +188,10 @@ static int ak7375_probe(struct i2c_client *client)
+ 	if (!ak7375_dev)
+ 		return -ENOMEM;
+ 
++	ak7375_dev->chip = device_get_match_data(&client->dev);
++	if (!ak7375_dev->chip)
++		ak7375_dev->chip = &ak7375_chipdef;
++
+ 	for (i = 0; i < ARRAY_SIZE(ak7375_supply_names); i++)
+ 		ak7375_dev->supplies[i].supply = ak7375_supply_names[i];
+ 
+@@ -206,22 +245,22 @@ static void ak7375_remove(struct i2c_client *client)
+ 
+ /*
+  * This function sets the vcm position, so it consumes least current
+- * The lens position is gradually moved in units of AK7375_CTRL_STEPS,
++ * The lens position is gradually moved in units of ctrl_steps,
+  * to make the movements smoothly.
+  */
+ static int __maybe_unused ak7375_vcm_suspend(struct device *dev)
+ {
+ 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+ 	struct ak7375_device *ak7375_dev = sd_to_ak7375_vcm(sd);
++	u8 steps = ak7375_dev->chip->ctrl_steps;
+ 	int ret, val;
+ 
+ 	if (!ak7375_dev->active)
+ 		return 0;
+ 
+-	for (val = ak7375_dev->focus->val & ~(AK7375_CTRL_STEPS - 1);
+-	     val >= 0; val -= AK7375_CTRL_STEPS) {
+-		ret = ak7375_i2c_write(ak7375_dev, AK7375_REG_POSITION,
+-				       val << 4, 2);
++	for (val = ak7375_dev->focus->val & ~(steps - 1);
++	     val >= 0; val -= steps) {
++		ret = ak7375_write_pos(ak7375_dev, val);
+ 		if (ret)
+ 			dev_err_once(dev, "%s I2C failure: %d\n",
+ 				     __func__, ret);
+@@ -246,13 +285,14 @@ static int __maybe_unused ak7375_vcm_suspend(struct device *dev)
+ /*
+  * This function sets the vcm position to the value set by the user
+  * through v4l2_ctrl_ops s_ctrl handler
+- * The lens position is gradually moved in units of AK7375_CTRL_STEPS,
++ * The lens position is gradually moved in units of ctrl_steps,
+  * to make the movements smoothly.
+  */
+ static int __maybe_unused ak7375_vcm_resume(struct device *dev)
+ {
+ 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+ 	struct ak7375_device *ak7375_dev = sd_to_ak7375_vcm(sd);
++	u8 steps = ak7375_dev->chip->ctrl_steps;
+ 	int ret, val;
+ 
+ 	if (ak7375_dev->active)
+@@ -264,20 +304,22 @@ static int __maybe_unused ak7375_vcm_resume(struct device *dev)
+ 		return ret;
+ 
+ 	/* Wait for vcm to become ready */
+-	usleep_range(AK7375_POWER_DELAY_US, AK7375_POWER_DELAY_US + 500);
++	usleep_range(ak7375_dev->chip->power_delay_us,
++		     ak7375_dev->chip->power_delay_us + 500);
+ 
+ 	ret = ak7375_i2c_write(ak7375_dev, AK7375_REG_CONT,
+ 		AK7375_MODE_ACTIVE, 1);
+ 	if (ret) {
+ 		dev_err(dev, "%s I2C failure: %d\n", __func__, ret);
++		regulator_bulk_disable(ARRAY_SIZE(ak7375_supply_names),
++				       ak7375_dev->supplies);
+ 		return ret;
+ 	}
+ 
+-	for (val = ak7375_dev->focus->val % AK7375_CTRL_STEPS;
++	for (val = ak7375_dev->focus->val % steps;
+ 	     val <= ak7375_dev->focus->val;
+-	     val += AK7375_CTRL_STEPS) {
+-		ret = ak7375_i2c_write(ak7375_dev, AK7375_REG_POSITION,
+-				       val << 4, 2);
++	     val += steps) {
++		ret = ak7375_write_pos(ak7375_dev, val);
+ 		if (ret)
+ 			dev_err_ratelimited(dev, "%s I2C failure: %d\n",
+ 						__func__, ret);
+@@ -285,12 +327,15 @@ static int __maybe_unused ak7375_vcm_resume(struct device *dev)
+ 	}
+ 
+ 	ak7375_dev->active = true;
++	dev_info_once(dev, "AK73xx VCM active (max=%u)\n",
++		      ak7375_dev->chip->max_focus_pos);
+ 
+ 	return 0;
+ }
+ 
+ static const struct of_device_id ak7375_of_table[] = {
+-	{ .compatible = "asahi-kasei,ak7375" },
++	{ .compatible = "asahi-kasei,ak7375", .data = &ak7375_chipdef },
++	{ .compatible = "asahi-kasei,ak7345", .data = &ak7345_chipdef },
+ 	{ /* sentinel */ }
+ };
+ MODULE_DEVICE_TABLE(of, ak7375_of_table);
+diff --git a/drivers/media/i2c/idg2030.c b/drivers/media/i2c/idg2030.c
+new file mode 100644
+index 000000000..535a77ec4
+--- /dev/null
++++ b/drivers/media/i2c/idg2030.c
+@@ -0,0 +1,261 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * InvenSense IDG2030 Optical Image Stabilization (OIS) companion driver
++ *
++ * Powers the OIS driver IC over its dedicated rails and exposes simple
++ * sysfs controls under /sys/class/camera/ois/ to enable or center the
++ * OIS actuator while the rear camera is active.
++ */
++
++#include <linux/delay.h>
++#include <linux/i2c.h>
++#include <linux/module.h>
++#include <linux/mod_devicetable.h>
++#include <linux/mutex.h>
++#include <linux/regulator/consumer.h>
++#include <linux/sysfs.h>
++#include <soc/samsung/camera_class.h>
++
++#define IDG2030_REG_CTRL		0x0000
++#define IDG2030_REG_MODE		0x0002
++#define IDG2030_REG_STATUS		0x0006
++#define IDG2030_REG_FW_VER_LO		0x00fc
++#define IDG2030_REG_FW_VER_HI		0x00fd
++
++#define IDG2030_MODE_NORMAL		0x00
++#define IDG2030_MODE_CENTER		0x02
++#define IDG2030_CTRL_ENABLE		0x01
++
++static const char * const idg2030_supply_names[] = {
++	"vddio",
++	"ois-vdd",
++	"ois-vm",
++};
++
++struct idg2030_dev {
++	struct i2c_client *client;
++	struct regulator_bulk_data supplies[ARRAY_SIZE(idg2030_supply_names)];
++	struct device *cam_dev;
++	struct mutex lock;
++	bool powered;
++	int mode;
++	u8 fw_lo;
++	u8 fw_hi;
++	bool fw_read;
++};
++
++static int idg2030_read_reg(struct i2c_client *client, u16 reg, u8 *val)
++{
++	u8 tx[2] = { (reg >> 8) & 0xff, reg & 0xff };
++	struct i2c_msg msgs[2] = {
++		{
++			.addr = client->addr,
++			.flags = 0,
++			.len = sizeof(tx),
++			.buf = tx,
++		},
++		{
++			.addr = client->addr,
++			.flags = I2C_M_RD,
++			.len = 1,
++			.buf = val,
++		},
++	};
++	int ret;
++
++	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
++	if (ret < 0)
++		return ret;
++	return ret == ARRAY_SIZE(msgs) ? 0 : -EIO;
++}
++
++static int idg2030_write_reg(struct i2c_client *client, u16 reg, u8 val)
++{
++	u8 buf[3] = { (reg >> 8) & 0xff, reg & 0xff, val };
++	int ret;
++
++	ret = i2c_master_send(client, buf, sizeof(buf));
++	if (ret < 0)
++		return ret;
++	return ret == sizeof(buf) ? 0 : -EIO;
++}
++
++static int idg2030_set_power(struct idg2030_dev *ois, int mode)
++{
++	int ret = 0;
++
++	mutex_lock(&ois->lock);
++
++	if (mode <= 0) {
++		if (ois->powered) {
++			idg2030_write_reg(ois->client, IDG2030_REG_CTRL, 0x00);
++			regulator_bulk_disable(ARRAY_SIZE(idg2030_supply_names),
++					       ois->supplies);
++			ois->powered = false;
++			ois->mode = 0;
++		}
++		goto out;
++	}
++
++	if (!ois->powered) {
++		ret = regulator_bulk_enable(ARRAY_SIZE(idg2030_supply_names),
++					    ois->supplies);
++		if (ret)
++			goto out;
++		msleep(20);
++		ois->powered = true;
++	}
++
++	if (!ois->fw_read) {
++		u8 lo = 0, hi = 0, st = 0;
++
++		if (!idg2030_read_reg(ois->client, IDG2030_REG_FW_VER_LO, &lo) &&
++		    !idg2030_read_reg(ois->client, IDG2030_REG_FW_VER_HI, &hi)) {
++			idg2030_read_reg(ois->client, IDG2030_REG_STATUS, &st);
++			ois->fw_lo = lo;
++			ois->fw_hi = hi;
++			ois->fw_read = true;
++			dev_info(&ois->client->dev,
++				 "IDG2030 OIS detected (fw=0x%02x%02x status=0x%02x)\n",
++				 hi, lo, st);
++		}
++	}
++
++	ret = idg2030_write_reg(ois->client, IDG2030_REG_MODE,
++				mode == 2 ? IDG2030_MODE_CENTER :
++					    IDG2030_MODE_NORMAL);
++	ret = ret ?: idg2030_write_reg(ois->client, IDG2030_REG_CTRL,
++				       IDG2030_CTRL_ENABLE);
++	if (!ret) {
++		ois->mode = mode;
++	} else {
++		dev_warn(&ois->client->dev, "OIS mode=%d i2c failed: %d\n",
++			 mode, ret);
++		regulator_bulk_disable(ARRAY_SIZE(idg2030_supply_names),
++				       ois->supplies);
++		ois->powered = false;
++		ois->mode = 0;
++	}
++
++out:
++	mutex_unlock(&ois->lock);
++	return ret;
++}
++
++static ssize_t ois_power_show(struct device *dev,
++			      struct device_attribute *attr, char *buf)
++{
++	struct idg2030_dev *ois = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%d\n", ois->mode);
++}
++
++static ssize_t ois_power_store(struct device *dev,
++			       struct device_attribute *attr,
++			       const char *buf, size_t count)
++{
++	struct idg2030_dev *ois = dev_get_drvdata(dev);
++	unsigned int val;
++	int ret;
++
++	ret = kstrtouint(buf, 10, &val);
++	if (ret)
++		return ret;
++
++	ret = idg2030_set_power(ois, (int)val);
++	return ret ? ret : count;
++}
++
++static ssize_t oisfw_show(struct device *dev,
++			  struct device_attribute *attr, char *buf)
++{
++	struct idg2030_dev *ois = dev_get_drvdata(dev);
++
++	if (!ois->fw_read)
++		return sysfs_emit(buf, "unprobed\n");
++	return sysfs_emit(buf, "0x%02x%02x\n", ois->fw_hi, ois->fw_lo);
++}
++
++static DEVICE_ATTR(ois_power, 0664, ois_power_show, ois_power_store);
++static DEVICE_ATTR_RO(oisfw);
++
++static struct attribute *idg2030_attrs[] = {
++	&dev_attr_ois_power.attr,
++	&dev_attr_oisfw.attr,
++	NULL,
++};
++ATTRIBUTE_GROUPS(idg2030);
++
++static int idg2030_probe(struct i2c_client *client)
++{
++	struct idg2030_dev *ois;
++	struct class *cam_cls;
++	unsigned int i;
++	int ret;
++
++	ois = devm_kzalloc(&client->dev, sizeof(*ois), GFP_KERNEL);
++	if (!ois)
++		return -ENOMEM;
++
++	ois->client = client;
++	mutex_init(&ois->lock);
++	for (i = 0; i < ARRAY_SIZE(idg2030_supply_names); i++)
++		ois->supplies[i].supply = idg2030_supply_names[i];
++
++	ret = devm_regulator_bulk_get(&client->dev,
++				      ARRAY_SIZE(idg2030_supply_names),
++				      ois->supplies);
++	if (ret)
++		return dev_err_probe(&client->dev, ret,
++				     "failed to get OIS supplies\n");
++
++	i2c_set_clientdata(client, ois);
++
++	cam_cls = samsung_camera_class();
++	if (cam_cls) {
++		ois->cam_dev = device_create_with_groups(cam_cls, NULL, 0, ois,
++							 idg2030_groups, "ois");
++		if (IS_ERR(ois->cam_dev)) {
++			dev_warn(&client->dev, "camera/ois sysfs failed: %ld\n",
++				 PTR_ERR(ois->cam_dev));
++			ois->cam_dev = NULL;
++		}
++	}
++
++	return 0;
++}
++
++static void idg2030_remove(struct i2c_client *client)
++{
++	struct idg2030_dev *ois = i2c_get_clientdata(client);
++
++	idg2030_set_power(ois, 0);
++	if (!IS_ERR_OR_NULL(ois->cam_dev))
++		device_unregister(ois->cam_dev);
++}
++
++static const struct of_device_id idg2030_of_match[] = {
++	{ .compatible = "invensense,idg2030" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, idg2030_of_match);
++
++static const struct i2c_device_id idg2030_i2c_id[] = {
++	{ "idg2030" },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, idg2030_i2c_id);
++
++static struct i2c_driver idg2030_driver = {
++	.driver = {
++		.name = "idg2030",
++		.of_match_table = idg2030_of_match,
++	},
++	.probe = idg2030_probe,
++	.remove = idg2030_remove,
++	.id_table = idg2030_i2c_id,
++};
++module_i2c_driver(idg2030_driver);
++
++MODULE_DESCRIPTION("InvenSense IDG2030 OIS companion driver");
++MODULE_LICENSE("GPL");
 diff --git a/drivers/media/i2c/s5c73c2.c b/drivers/media/i2c/s5c73c2.c
-index 5c8a95c88..6ce7d3329 100644
+index 5c8a95c88..161614242 100644
 --- a/drivers/media/i2c/s5c73c2.c
 +++ b/drivers/media/i2c/s5c73c2.c
 @@ -31,15 +31,23 @@
@@ -668,7 +1252,7 @@ index 5c8a95c88..6ce7d3329 100644
  static int s5c73c2_read(struct s5c73c2 *c2, u16 addr, u16 reg, u16 *val)
  {
  	u8 wbuf[2], rbuf[2];
-@@ -539,14 +834,955 @@ static int s5c73c2_probe(struct i2c_client *client)
+@@ -539,14 +834,972 @@ static int s5c73c2_probe(struct i2c_client *client)
  	if (IS_ERR(c2->pins_on))
  		return dev_err_probe(dev, PTR_ERR(c2->pins_on), "active pins\n");
  
@@ -711,17 +1295,23 @@ index 5c8a95c88..6ce7d3329 100644
 +		goto err_entity;
 +
 +	pm_runtime_set_active(c2->dev);
++	pm_runtime_get_noresume(c2->dev);
 +	pm_runtime_enable(c2->dev);
++	pm_runtime_set_autosuspend_delay(c2->dev, 3000);
++	pm_runtime_use_autosuspend(c2->dev);
 +
 +	ret = v4l2_async_register_subdev_sensor(&c2->sd);
 +	if (ret)
 +		goto err_pm;
 +
-+	pm_runtime_idle(c2->dev);
++	pm_runtime_mark_last_busy(c2->dev);
++	pm_runtime_put_autosuspend(c2->dev);
 +	return 0;
 +
 +err_pm:
++	pm_runtime_dont_use_autosuspend(c2->dev);
 +	pm_runtime_disable(c2->dev);
++	pm_runtime_put_noidle(c2->dev);
 +	v4l2_subdev_cleanup(&c2->sd);
 +err_entity:
 +	media_entity_cleanup(&c2->sd.entity);
@@ -1168,7 +1758,8 @@ index 5c8a95c88..6ce7d3329 100644
 +		return ret == -EINVAL ? 0 : ret;
 +
 +	if (!c2->sensor) {
-+		pm_runtime_put(c2->dev);
++		pm_runtime_mark_last_busy(c2->dev);
++		pm_runtime_put_autosuspend(c2->dev);
 +		return -ENODEV;
 +	}
 +
@@ -1198,7 +1789,8 @@ index 5c8a95c88..6ce7d3329 100644
 +		break;
 +	}
 +
-+	pm_runtime_put(c2->dev);
++	pm_runtime_mark_last_busy(c2->dev);
++	pm_runtime_put_autosuspend(c2->dev);
 +	return ret;
 +}
 +
@@ -1373,7 +1965,8 @@ index 5c8a95c88..6ce7d3329 100644
 +	return 0;
 +
 +err_pm:
-+	pm_runtime_put(c2->dev);
++	pm_runtime_mark_last_busy(c2->dev);
++	pm_runtime_put_autosuspend(c2->dev);
 +	return ret;
 +}
 +
@@ -1414,7 +2007,8 @@ index 5c8a95c88..6ce7d3329 100644
 +				 frame_state);
 +	}
 +
-+	pm_runtime_put(c2->dev);
++	pm_runtime_mark_last_busy(c2->dev);
++	pm_runtime_put_autosuspend(c2->dev);
 +}
 +
 +static int s5c73c2_s_stream(struct v4l2_subdev *sd, int enable)
@@ -1509,16 +2103,22 @@ index 5c8a95c88..6ce7d3329 100644
 +					 V4L2_CID_EXPOSURE,
 +					 c2->info->expo_min, expo_max, 1,
 +					 min(expo_max, (int)mode->expo_def));
++	if (c2->exposure)
++		c2->exposure->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
 +
 +	c2->again = v4l2_ctrl_new_std(hdl, &s5c73c2_ctrl_ops,
 +				      V4L2_CID_ANALOGUE_GAIN,
 +				      c2->info->again_min, c2->info->again_max,
 +				      1, c2->info->again_default);
++	if (c2->again)
++		c2->again->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
 +
 +	c2->dgain = v4l2_ctrl_new_std(hdl, &s5c73c2_ctrl_ops,
 +				      V4L2_CID_DIGITAL_GAIN,
 +				      S5C73C2_DGAIN_MIN, S5C73C2_DGAIN_MAX,
 +				      1, S5C73C2_DGAIN_DEFAULT);
++	if (c2->dgain)
++		c2->dgain->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
 +
 +	if (hdl->error) {
 +		ret = hdl->error;
@@ -1607,6 +2207,7 @@ index 5c8a95c88..6ce7d3329 100644
 +	struct s5c73c2 *c2 = to_s5c73c2(sd);
 +
 +	v4l2_async_unregister_subdev(sd);
++	pm_runtime_dont_use_autosuspend(c2->dev);
 +	pm_runtime_disable(c2->dev);
 +	if (!pm_runtime_status_suspended(c2->dev))
 +		s5c73c2_power_off(c2, ARRAY_SIZE(s5c73c2_supplies));
@@ -1624,7 +2225,7 @@ index 5c8a95c88..6ce7d3329 100644
  static const struct of_device_id s5c73c2_of_match[] = {
  	{ .compatible = "samsung,s5c73c2" },
  	{ }
-@@ -557,8 +1793,10 @@ static struct i2c_driver s5c73c2_driver = {
+@@ -557,8 +1810,10 @@ static struct i2c_driver s5c73c2_driver = {
  	.driver = {
  		.name = "s5c73c2",
  		.of_match_table = s5c73c2_of_match,
@@ -2557,10 +3158,10 @@ index 000000000..b4c79000d
 +};
 diff --git a/drivers/media/i2c/s5k4e6.c b/drivers/media/i2c/s5k4e6.c
 new file mode 100644
-index 000000000..b88d01470
+index 000000000..c96dd9b9a
 --- /dev/null
 +++ b/drivers/media/i2c/s5k4e6.c
-@@ -0,0 +1,1035 @@
+@@ -0,0 +1,1078 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Samsung S5K4E6 5MP (2608x1960) MIPI CSI-2 image sensor driver
@@ -2622,7 +3223,11 @@ index 000000000..b88d01470
 +#define S5K4E6_AGAIN_MAX		512	/* 16.0x */
 +#define S5K4E6_DGAIN_MIN		256	/* 1.0x in Q8 fixed point */
 +#define S5K4E6_DGAIN_DEFAULT		256
-+#define S5K4E6_DGAIN_MAX		4095
++/*
++ * Keep hardware digital gain at unity (1.0x) and apply extra digital gain
++ * cleanly in SoftISP after per-channel AWB and black-level subtraction.
++ */
++#define S5K4E6_DGAIN_MAX		256
 +
 +#define S5K4E6_VFLIP_NORMAL		0xe0
 +#define S5K4E6_VFLIP_MIRROR		0xe2
@@ -2950,11 +3555,11 @@ index 000000000..b88d01470
 +static u32 s5k4e6_get_format_code(struct s5k4e6 *sensor)
 +{
 +	/*
-+	 * Native S5K4E6 Bayer order is BGGR; toggling VFLIP shifts rows by 1
-+	 * line and turns BGGR into GBRG.
++	 * Native S5K4E6 Bayer order (0x5333=0xe0) is GRBG; toggling VFLIP shifts
++	 * rows by 1 line and turns GRBG into BGGR.
 +	 */
-+	return sensor->vflip->val ? MEDIA_BUS_FMT_SGBRG10_1X10 :
-+				    MEDIA_BUS_FMT_SBGGR10_1X10;
++	return sensor->vflip->val ? MEDIA_BUS_FMT_SBGGR10_1X10 :
++				    MEDIA_BUS_FMT_SGRBG10_1X10;
 +}
 +
 +static void s5k4e6_fill_format(struct s5k4e6 *sensor,
@@ -3057,18 +3662,50 @@ index 000000000..b88d01470
 +	return 0;
 +}
 +
++static int s5k4e6_write_expo_again(struct i2c_client *client, u16 expo, u16 again)
++{
++	/*
++	 * S5K4E6 firmware (fimc_is_fw2 0x8b88e..0x8b93c) updates both the
++	 * primary (0x0202/0x0204) and secondary (0x021e/0x0220) exposure/gain
++	 * register banks as 6-byte bursts because 0x0216=0x01 stays active.
++	 */
++	static const u16 bases[] = { S5K4E6_REG_COARSE_INT_TIME, 0x021e };
++	size_t i;
++
++	for (i = 0; i < ARRAY_SIZE(bases); i++) {
++		u8 buf[6] = {
++			bases[i] >> 8, bases[i] & 0xff,
++			expo >> 8, expo & 0xff,
++			again >> 8, again & 0xff,
++		};
++		int ret = s5k4e6_write_raw(client, buf, sizeof(buf));
++		if (ret)
++			return ret;
++	}
++	return 0;
++}
++
 +static int s5k4e6_set_dgain(struct i2c_client *client, u16 gain)
 +{
-+	u8 buf[10] = {
-+		S5K4E6_REG_DIGITAL_GAIN_GR >> 8,
-+		S5K4E6_REG_DIGITAL_GAIN_GR & 0xff,
-+		gain >> 8, gain & 0xff,
-+		gain >> 8, gain & 0xff,
-+		gain >> 8, gain & 0xff,
-+		gain >> 8, gain & 0xff,
-+	};
++	/*
++	 * Mirror 10-byte quad-channel digital gain bursts to both 0x020e..0x0214
++	 * and 0x0222..0x0228 matching fimc_is_fw2 0x8b8c8..0x8b97c.
++	 */
++	static const u16 bases[] = { S5K4E6_REG_DIGITAL_GAIN_GR, 0x0222 };
++	size_t i;
 +
-+	return s5k4e6_write_raw(client, buf, sizeof(buf));
++	for (i = 0; i < ARRAY_SIZE(bases); i++) {
++		u8 hi = gain >> 8;
++		u8 lo = gain & 0xff;
++		u8 buf[10] = {
++			bases[i] >> 8, bases[i] & 0xff,
++			hi, lo, hi, lo, hi, lo, hi, lo,
++		};
++		int ret = s5k4e6_write_raw(client, buf, sizeof(buf));
++		if (ret)
++			return ret;
++	}
++	return 0;
 +}
 +
 +static int s5k4e6_set_ctrl(struct v4l2_ctrl *ctrl)
@@ -3095,12 +3732,12 @@ index 000000000..b88d01470
 +
 +	switch (ctrl->id) {
 +	case V4L2_CID_EXPOSURE:
-+		ret = s5k4e6_write16(client, S5K4E6_REG_COARSE_INT_TIME,
-+				     ctrl->val);
++		ret = s5k4e6_write_expo_again(client, ctrl->val,
++					      sensor->again->val);
 +		break;
 +	case V4L2_CID_ANALOGUE_GAIN:
-+		ret = s5k4e6_write16(client, S5K4E6_REG_ANALOGUE_GAIN,
-+				     ctrl->val);
++		ret = s5k4e6_write_expo_again(client, sensor->exposure->val,
++					      ctrl->val);
 +		break;
 +	case V4L2_CID_DIGITAL_GAIN:
 +		ret = s5k4e6_set_dgain(client, ctrl->val);
@@ -3251,6 +3888,7 @@ index 000000000..b88d01470
 +	usleep_range(5000, 6000);
 +
 +	ret = s5k4e6_apply_mode(sensor, sensor->mode);
++	ret = ret ?: s5k4e6_write16(client, S5K4E6_REG_PAGE_SELECT, 0x4000);
 +	if (ret)
 +		goto err_pm;
 +
@@ -3259,7 +3897,7 @@ index 000000000..b88d01470
 +		goto err_pm;
 +
 +	ret = s5k4e6_write8(client, S5K4E6_REG_PARAM_HOLD, 0x00);
-+	ret = ret ?: s5k4e6_write16(client, S5K4E6_REG_PAGE_SELECT, 0x4000);
++	usleep_range(4000, 5000);
 +	ret = ret ?: s5k4e6_write8(client, S5K4E6_REG_MODE_SELECT, 0x01);
 +	if (ret)
 +		goto err_pm;
@@ -3387,16 +4025,22 @@ index 000000000..b88d01470
 +					     V4L2_CID_EXPOSURE,
 +					     S5K4E6_EXPO_MIN, expo_max, 1,
 +					     min(expo_max, S5K4E6_EXPO_DEFAULT));
++	if (sensor->exposure)
++		sensor->exposure->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
 +
 +	sensor->again = v4l2_ctrl_new_std(hdl, &s5k4e6_ctrl_ops,
 +					  V4L2_CID_ANALOGUE_GAIN,
 +					  S5K4E6_AGAIN_MIN, S5K4E6_AGAIN_MAX,
 +					  1, S5K4E6_AGAIN_DEFAULT);
++	if (sensor->again)
++		sensor->again->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
 +
 +	sensor->dgain = v4l2_ctrl_new_std(hdl, &s5k4e6_ctrl_ops,
 +					  V4L2_CID_DIGITAL_GAIN,
 +					  S5K4E6_DGAIN_MIN, S5K4E6_DGAIN_MAX,
 +					  1, S5K4E6_DGAIN_DEFAULT);
++	if (sensor->dgain)
++		sensor->dgain->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
 +
 +	sensor->vflip = v4l2_ctrl_new_std(hdl, &s5k4e6_ctrl_ops,
 +					  V4L2_CID_VFLIP, 0, 1, 1, 0);
@@ -3674,3 +4318,346 @@ index a608851be..01147b1c1 100644
  	irq = platform_get_irq(pdev, 0);
  	if (irq < 0)
  		return irq;
+diff --git a/drivers/regulator/s2mpb02-regulator.c b/drivers/regulator/s2mpb02-regulator.c
+index 6d7fc2049..5d4107258 100644
+--- a/drivers/regulator/s2mpb02-regulator.c
++++ b/drivers/regulator/s2mpb02-regulator.c
+@@ -11,19 +11,45 @@
+ 
+ #include <linux/i2c.h>
+ #include <linux/kernel.h>
++#include <linux/leds.h>
+ #include <linux/module.h>
+ #include <linux/mod_devicetable.h>
++#include <linux/mutex.h>
+ #include <linux/regmap.h>
+ #include <linux/regulator/driver.h>
++#include <soc/samsung/camera_class.h>
+ 
+ #define S2MPB02_REG_ID			0x00
+ #define S2MPB02_REG_B1CTRL1		0x0b
+ #define S2MPB02_REG_B1CTRL2		0x0c
+ #define S2MPB02_REG_B2CTRL1		0x0d
+ #define S2MPB02_REG_B2CTRL2		0x0e
++#define S2MPB02_REG_FLED_CTRL1		0x12
++#define S2MPB02_REG_FLED_CTRL2		0x13
++#define S2MPB02_REG_FLED_CUR1		0x14
++#define S2MPB02_REG_FLED_TIME1		0x15
++#define S2MPB02_REG_FLED_IRD2		0x1b
+ #define S2MPB02_REG_L1CTRL		0x1e
+ #define S2MPB02_REG_L18CTRL		0x2f
+ 
++#define S2MPB02_FLED_EN_MASK		GENMASK(7, 6)
++#define S2MPB02_FLED_OFF		0x00
++#define S2MPB02_FLED_FLASH_ON		0x80
++#define S2MPB02_FLED_TORCH_ON		0xc0
++#define S2MPB02_FLED_LV_EN_MASK		BIT(3)
++#define S2MPB02_FLED_FLASH_CUR_MASK	GENMASK(7, 4)
++#define S2MPB02_FLED_TORCH_CUR_MASK	GENMASK(3, 0)
++#define S2MPB02_FLED_FLASH_CUR_SHIFT	4
++#define S2MPB02_FLED_TORCH_CUR_SHIFT	0
++#define S2MPB02_FLED_FLASH_TIME_MASK	GENMASK(7, 4)
++#define S2MPB02_FLED_TORCH_TIME_MASK	GENMASK(3, 0)
++#define S2MPB02_FLED_FLASH_TIME_250MS	0x30
++#define S2MPB02_FLED_TORCH_TIME_MAX	0x0f
++#define S2MPB02_FLED_IRD2_ACT_DISCH	BIT(1)
++#define S2MPB02_FLED_MAX_STEP		15
++#define S2MPB02_FLED_DEF_TORCH		6	/* 120 mA */
++#define S2MPB02_FLED_DEF_FLASH		8	/* 800 mA */
++
+ #define S2MPB02_LDO_VSEL_MASK		GENMASK(6, 0)
+ #define S2MPB02_LDO_ENABLE_MASK		BIT(7)
+ #define S2MPB02_LDO_N_VOLTAGES		128
+@@ -43,6 +69,7 @@ static bool s2mpb02_readable_reg(struct device *dev, unsigned int reg)
+ {
+ 	return reg == S2MPB02_REG_ID ||
+ 	       (reg >= S2MPB02_REG_B1CTRL1 && reg <= S2MPB02_REG_B2CTRL2) ||
++	       (reg >= S2MPB02_REG_FLED_CTRL1 && reg <= S2MPB02_REG_FLED_IRD2) ||
+ 	       (reg >= S2MPB02_REG_L1CTRL && reg <= S2MPB02_REG_L18CTRL);
+ }
+ 
+@@ -129,6 +156,258 @@ static const struct regulator_desc s2mpb02_regulators[] = {
+ 	S2MPB02_BUCK(2, 20),
+ };
+ 
++struct s2mpb02_fled {
++	struct regmap *regmap;
++	struct mutex lock;
++	struct led_classdev torch_cdev;
++	struct led_classdev flash_cdev;
++	struct device *cam_dev;
++	u8 torch_level;
++	u8 flash_level;
++};
++
++static struct class *s2mpb02_cam_class;
++static DEFINE_MUTEX(s2mpb02_cam_class_lock);
++
++struct class *samsung_camera_class(void)
++{
++	struct class *cls;
++
++	mutex_lock(&s2mpb02_cam_class_lock);
++	if (!s2mpb02_cam_class) {
++		cls = class_create("camera");
++		if (!IS_ERR(cls))
++			s2mpb02_cam_class = cls;
++	}
++	cls = s2mpb02_cam_class;
++	mutex_unlock(&s2mpb02_cam_class_lock);
++
++	return cls;
++}
++EXPORT_SYMBOL_GPL(samsung_camera_class);
++
++static int s2mpb02_fled_apply(struct s2mpb02_fled *fled, u8 flash_lvl,
++			      u8 torch_lvl)
++{
++	int ret;
++
++	mutex_lock(&fled->lock);
++
++	flash_lvl = min_t(u8, flash_lvl, S2MPB02_FLED_MAX_STEP);
++	torch_lvl = min_t(u8, torch_lvl, S2MPB02_FLED_MAX_STEP);
++
++	/* Transition through OFF before engaging flash to reset one-shot timer. */
++	ret = regmap_update_bits(fled->regmap, S2MPB02_REG_FLED_CTRL1,
++				 S2MPB02_FLED_EN_MASK | S2MPB02_FLED_LV_EN_MASK,
++				 S2MPB02_FLED_OFF);
++	if (ret)
++		goto out;
++
++	if (flash_lvl) {
++		ret = regmap_update_bits(fled->regmap, S2MPB02_REG_FLED_CUR1,
++					 S2MPB02_FLED_FLASH_CUR_MASK,
++					 flash_lvl << S2MPB02_FLED_FLASH_CUR_SHIFT);
++		ret = ret ?: regmap_update_bits(fled->regmap,
++						S2MPB02_REG_FLED_TIME1,
++						S2MPB02_FLED_FLASH_TIME_MASK,
++						S2MPB02_FLED_FLASH_TIME_250MS);
++		ret = ret ?: regmap_update_bits(fled->regmap,
++						S2MPB02_REG_FLED_CTRL1,
++						S2MPB02_FLED_EN_MASK |
++						S2MPB02_FLED_LV_EN_MASK,
++						S2MPB02_FLED_FLASH_ON);
++	} else if (torch_lvl) {
++		ret = regmap_update_bits(fled->regmap, S2MPB02_REG_FLED_CUR1,
++					 S2MPB02_FLED_TORCH_CUR_MASK,
++					 torch_lvl << S2MPB02_FLED_TORCH_CUR_SHIFT);
++		ret = ret ?: regmap_update_bits(fled->regmap,
++						S2MPB02_REG_FLED_TIME1,
++						S2MPB02_FLED_TORCH_TIME_MASK,
++						S2MPB02_FLED_TORCH_TIME_MAX);
++		ret = ret ?: regmap_update_bits(fled->regmap,
++						S2MPB02_REG_FLED_CTRL1,
++						S2MPB02_FLED_EN_MASK |
++						S2MPB02_FLED_LV_EN_MASK,
++						S2MPB02_FLED_TORCH_ON);
++	} else {
++		ret = regmap_update_bits(fled->regmap, S2MPB02_REG_FLED_IRD2,
++					 S2MPB02_FLED_IRD2_ACT_DISCH,
++					 S2MPB02_FLED_IRD2_ACT_DISCH);
++	}
++
++	if (!ret) {
++		fled->flash_level = flash_lvl;
++		fled->torch_level = flash_lvl ? 0 : torch_lvl;
++	}
++
++out:
++	mutex_unlock(&fled->lock);
++	return ret;
++}
++
++static int s2mpb02_torch_cdev_set(struct led_classdev *cdev,
++				 enum led_brightness brightness)
++{
++	struct s2mpb02_fled *fled =
++		container_of(cdev, struct s2mpb02_fled, torch_cdev);
++
++	return s2mpb02_fled_apply(fled, 0, min_t(u8, brightness, S2MPB02_FLED_MAX_STEP));
++}
++
++static int s2mpb02_flash_cdev_set(struct led_classdev *cdev,
++				 enum led_brightness brightness)
++{
++	struct s2mpb02_fled *fled =
++		container_of(cdev, struct s2mpb02_fled, flash_cdev);
++
++	return s2mpb02_fled_apply(fled, min_t(u8, brightness, S2MPB02_FLED_MAX_STEP), 0);
++}
++
++static ssize_t rear_torch_flash_show(struct device *dev,
++				     struct device_attribute *attr, char *buf)
++{
++	struct s2mpb02_fled *fled = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", fled->torch_level);
++}
++
++static ssize_t rear_torch_flash_store(struct device *dev,
++				      struct device_attribute *attr,
++				      const char *buf, size_t count)
++{
++	struct s2mpb02_fled *fled = dev_get_drvdata(dev);
++	unsigned int val;
++	u8 lvl;
++	int ret;
++
++	ret = kstrtouint(buf, 10, &val);
++	if (ret)
++		return ret;
++
++	if (val == 0)
++		lvl = 0;
++	else if (val == 1)
++		lvl = S2MPB02_FLED_DEF_TORCH;
++	else if (val == 100)
++		lvl = 12; /* 240 mA factory bright torch */
++	else if (val >= 1001 && val <= 1010)
++		lvl = val - 1000;
++	else
++		lvl = min_t(u8, val, S2MPB02_FLED_MAX_STEP);
++
++	ret = s2mpb02_fled_apply(fled, 0, lvl);
++	return ret ? ret : count;
++}
++
++static ssize_t rear_flash_show(struct device *dev,
++			       struct device_attribute *attr, char *buf)
++{
++	struct s2mpb02_fled *fled = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", fled->flash_level);
++}
++
++static ssize_t rear_flash_store(struct device *dev,
++				struct device_attribute *attr,
++				const char *buf, size_t count)
++{
++	struct s2mpb02_fled *fled = dev_get_drvdata(dev);
++	unsigned int val;
++	u8 lvl;
++	int ret;
++
++	ret = kstrtouint(buf, 10, &val);
++	if (ret)
++		return ret;
++
++	if (val == 0)
++		lvl = 0;
++	else if (val == 1)
++		lvl = S2MPB02_FLED_DEF_FLASH;
++	else if (val == 100)
++		lvl = S2MPB02_FLED_MAX_STEP;
++	else
++		lvl = min_t(u8, val, S2MPB02_FLED_MAX_STEP);
++
++	ret = s2mpb02_fled_apply(fled, lvl, 0);
++	return ret ? ret : count;
++}
++
++static DEVICE_ATTR(rear_torch_flash, 0664, rear_torch_flash_show,
++		   rear_torch_flash_store);
++static DEVICE_ATTR(rear_flash, 0664, rear_flash_show, rear_flash_store);
++
++static struct attribute *s2mpb02_flash_attrs[] = {
++	&dev_attr_rear_torch_flash.attr,
++	&dev_attr_rear_flash.attr,
++	NULL,
++};
++ATTRIBUTE_GROUPS(s2mpb02_flash);
++
++static void s2mpb02_fled_cleanup(void *data)
++{
++	struct s2mpb02_fled *fled = data;
++
++	s2mpb02_fled_apply(fled, 0, 0);
++	if (!IS_ERR_OR_NULL(fled->cam_dev))
++		device_unregister(fled->cam_dev);
++}
++
++static int s2mpb02_fled_probe(struct device *dev, struct regmap *regmap)
++{
++	struct s2mpb02_fled *fled;
++	struct class *cam_cls;
++	int ret;
++
++	fled = devm_kzalloc(dev, sizeof(*fled), GFP_KERNEL);
++	if (!fled)
++		return -ENOMEM;
++
++	fled->regmap = regmap;
++	mutex_init(&fled->lock);
++
++	ret = regmap_update_bits(regmap, S2MPB02_REG_FLED_IRD2,
++				 S2MPB02_FLED_IRD2_ACT_DISCH,
++				 S2MPB02_FLED_IRD2_ACT_DISCH);
++	if (ret)
++		return ret;
++
++	ret = s2mpb02_fled_apply(fled, 0, 0);
++	if (ret)
++		return ret;
++
++	if (IS_ENABLED(CONFIG_LEDS_CLASS)) {
++		fled->torch_cdev.name = "torch-sec1";
++		fled->torch_cdev.max_brightness = S2MPB02_FLED_MAX_STEP;
++		fled->torch_cdev.brightness_set_blocking = s2mpb02_torch_cdev_set;
++		ret = devm_led_classdev_register(dev, &fled->torch_cdev);
++		if (ret)
++			dev_warn(dev, "failed to register torch-sec1: %d\n", ret);
++
++		fled->flash_cdev.name = "flash-sec1";
++		fled->flash_cdev.max_brightness = S2MPB02_FLED_MAX_STEP;
++		fled->flash_cdev.brightness_set_blocking = s2mpb02_flash_cdev_set;
++		ret = devm_led_classdev_register(dev, &fled->flash_cdev);
++		if (ret)
++			dev_warn(dev, "failed to register flash-sec1: %d\n", ret);
++	}
++
++	cam_cls = samsung_camera_class();
++	if (cam_cls) {
++		fled->cam_dev = device_create_with_groups(cam_cls, NULL, 0,
++							  fled,
++							  s2mpb02_flash_groups,
++							  "flash");
++		if (IS_ERR(fled->cam_dev)) {
++			dev_warn(dev, "failed to create camera/flash sysfs: %ld\n",
++				 PTR_ERR(fled->cam_dev));
++			fled->cam_dev = NULL;
++		}
++	}
++
++	return devm_add_action_or_reset(dev, s2mpb02_fled_cleanup, fled);
++}
++
+ static int s2mpb02_probe(struct i2c_client *client)
+ {
+ 	struct device *dev = &client->dev;
+@@ -161,6 +440,10 @@ static int s2mpb02_probe(struct i2c_client *client)
+ 					     s2mpb02_regulators[i].name);
+ 	}
+ 
++	ret = s2mpb02_fled_probe(dev, regmap);
++	if (ret)
++		dev_warn(dev, "FLED init failed: %d\n", ret);
++
+ 	return 0;
+ }
+ 
+diff --git a/include/soc/samsung/camera_class.h b/include/soc/samsung/camera_class.h
+new file mode 100644
+index 000000000..b5ee30eea
+--- /dev/null
++++ b/include/soc/samsung/camera_class.h
+@@ -0,0 +1,9 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef __SOC_SAMSUNG_CAMERA_CLASS_H
++#define __SOC_SAMSUNG_CAMERA_CLASS_H
++
++struct class;
++
++struct class *samsung_camera_class(void);
++
++#endif /* __SOC_SAMSUNG_CAMERA_CLASS_H */

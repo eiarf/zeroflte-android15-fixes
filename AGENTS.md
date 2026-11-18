@@ -50,7 +50,7 @@ Always reference and branch from these forked repositories:
 | **Audio** | 🟢 **WORKING** | `madera` / `cs47l85` / `max98925` / `zero-wm1840` modules modprobed in `early-init`; ALSA card 0 (`pcmC0D0p`) & Speaker active. |
 | **Wi-Fi & Bluetooth** | 🟢 **WORKING** | `BCM4358A3` (`brcmfmac4358-pcie.*` & `BCM4358A3.hcd`) staged in `/vendor/firmware/brcm/`; 2.4GHz/5GHz Wi-Fi & BT active. |
 | **ADB Debugging** | 🟢 **WORKING** | ADB functional; `/vendor` modification via TWRP (`/system_root/system/vendor`). |
-| **Camera** | 🔴 **NOT WORKING** | Exynos FIMC-IS ISP needs modern V4L2/libcamera AIDL HAL provider (`NK_HAS_CAMERA=false`). |
+| **Camera** | 🟢 **WORKING** | Custom AIDL V3 V4L2/SoftISP HAL (`android.hardware.camera.provider-V3-service`, `ICameraProvider/internal/0`) + `NK_HAS_CAMERA=true`: Rear `s5c73c2`/`s5k2p2` (`5328x3000` & `2664x1500` `SGRBG10`), Front `s5k4e6` (`2608x1960` `SGRBG10`), `ak7375` AF VCM, `idg2030` OIS, `s2mpb02` Flash & QS Torch, 1080p AVC/AAC video. |
 
 ---
 
@@ -87,8 +87,8 @@ Always reference and branch from these forked repositories:
 
 ### ⚠️ Rule 5: Camera HAL Requires Modern AIDL Bridge, NOT Legacy Blobs
 * **The Context**: The proprietary Samsung Camera HAL (`camera.samsungexynos7420.so`) is a legacy 32/64-bit HAL1/HAL3 blob that communicates directly with Samsung's out-of-tree FIMC-IS driver ioctls.
-* **The Failure Mode**: Mainline Kernel 6.6 uses modern Linux V4L2 and Media Controller subsystems. Simply copying proprietary camera blobs from stock Nougat/Oreo ROMs will crash `cameraserver` immediately.
-* **Correct Procedure**: Camera support must be implemented either through `libcamera` with a custom Exynos 7420 pipeline handler or an open-source V4L2 AIDL camera provider wrapper.
+* **The Failure Mode**: Mainline Kernel 6.6 uses modern Linux V4L2 and Media Controller subsystems. Simply copying proprietary camera blobs from stock Nougat/Oreo ROMs will crash `cameraserver` immediately. Moreover, on `s5k4e6`, Bank A (`0x0202/0x0204`) and Bank B (`0x021e/0x0220`) must both be written when `0x0216=0x01`, and `VFLIP=0` (`0x5333=0xe0`) outputs **`GRBG`** (`MEDIA_BUS_FMT_SGRBG10_1X10`), matching `s5c73c2`.
+* **Correct Procedure**: Use the open-source AIDL V3 V4L2 + `SoftISP` provider in `camera/` (`ICameraProvider/internal/0`, synced to `universal7420-common/hardware/camera/` with `NK_HAS_CAMERA=true`), driving `s6_drm_gralloc` DMA-BUF outputs, `ak7375` contrast-AF, `idg2030` OIS (`ois_power`), and `s2mpb02` flash/torch (`rear_flash` / `rear_torch_flash`). Keep 16MP `5328x3000` V4L2 buffer queues at `<= 3` buffers under `160 MiB` `cam_cma`.
 
 ### ⚠️ Rule 6: Display Resolution & Density Scaling (FHD 1080p vs Native QHD 1440p)
 * **The Context**: Native Galaxy S6 display is 1440x2560 (3.7M pixels). The Mali-T760 MP8 struggles on Android 15 with software DRM/Mesa composition pushing this pixel load.
@@ -180,9 +180,11 @@ adb shell sh /vendor/bin/init.postboot.sh
 
 ## 6. Directory Map in this Repository
 
-- `configs/`: Production-ready configurations (`init.samsungexynos7420.rc`, `init.power.rc`, `init.postboot.sh`, `powerhint.json`, `task_profiles.json`, `permissive_rules.cil`, `vendor_build.prop`).
+- `camera/`: AIDL V3 (`ICameraProvider/internal/0`) V4L2 + `SoftISP` camera provider service (`camera_provider.cpp`, `camera_device.cpp`, `v4l2_pipeline.cpp`, `soft_isp.cpp`, `gralloc_bridge.cpp`, `camera_metadata_helper.cpp`, `main.cpp`) and standalone NDK build script (`build_camera_hal.sh`).
+- `configs/`: Production-ready configurations (`init.samsungexynos7420.rc`, `init.power.rc`, `init.postboot.sh`, `powerhint.json`, `task_profiles.json`, `permissive_rules.cil`, `vendor_build.prop`, and `camera/` VINTF/init/permission XMLs).
 - `hwc-gralloc/`: Hardware Composer (`s6_kms_hwcomposer.cpp`, `hwcomposer.samsungexynos7420.so`) and DRM gralloc (`s6_drm_gralloc.cpp`, `gralloc.samsungexynos7420.so`) sources and prebuilt binaries.
 - `mesa-panfrost/`: Compiled Mesa 24.0.9 Panfrost & DRI runtime libraries (`libEGL.so`, `libGLES*.so`, `panfrost_dri.so`, etc.).
+- `patches/`: Verified Linux 6.6 kernel patches (`0001-media-exynos7420-zeroflte-camera-v4l2-phase1.patch`).
 - `scripts/`: Diagnostic, patching, and verification scripts (`apply_brcm_firmware.sh`, etc.).
 - `logs/`: TWRP recovery logs, ramoops, and kernel crash diagnostics captured during boot debugging.
 - `reports/`: In-depth engineering reports on boot recovery and performance optimization.

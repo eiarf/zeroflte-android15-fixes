@@ -114,7 +114,7 @@ on post-fs-data
     chown system radio /sys/class/camera/rear/isp_core
     chown system radio /sys/class/camera/rear/fw_update
     chown system radio /sys/class/camera/rear/from_write
-    chown system radio /sys/class/camera/flash/rear_flash
+    chown cameraserver system /sys/class/camera/flash/rear_flash
     chown cameraserver system /sys/class/camera/flash/rear_torch_flash
     chmod 0664 /sys/class/camera/flash/rear_flash
     chmod 0664 /sys/class/camera/flash/rear_torch_flash
@@ -123,7 +123,6 @@ on post-fs-data
     chown system radio /sys/class/camera/front/front_checkfw_factory
     chown system radio /sys/class/camera/front/front_camtype
     chown system radio /sys/class/camera/ois/selftest
-    chown system radio /sys/class/camera/ois/ois_power
     chown system radio /sys/class/camera/ois/ois_rawdata
     chown system radio /sys/class/camera/ois/oisfw
     chown system radio /sys/class/camera/ois/ois_diff
@@ -228,8 +227,10 @@ on post-fs-data
 on boot
     #setprop ro.radio.noril yes
 
-    # Load V4L2 camera and companion SPI kernel modules
-    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules spi-exynos-gpio s5c73c2 s5k4e6 imx-mipi-csis exynos7-flite
+    # Load V4L2 camera, companion SPI, VCM AF, and OIS kernel modules
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules spi-exynos-gpio s5c73c2 s5k4e6 ak7375 idg2030 imx-mipi-csis exynos7-flite
+    chown cameraserver system /sys/class/camera/ois/ois_power
+    chmod 0664 /sys/class/camera/ois/ois_power
 
     # IPSec for VOLTE
     chown root system /dev/socket
