@@ -8,19 +8,22 @@ This repository contains diagnostic tools, patched configuration files, kernel a
 
 All source modifications have been applied and pushed to the following repositories under `@eiarf` (branch: `lineage-22.2-KRNL6.6`):
 
-1. **Common Device Tree (`universal7420-common`)**:
-   [https://github.com/eiarf/android_device_samsung_universal7420-common](https://github.com/eiarf/android_device_samsung_universal7420-common)
-   - Patched `powerhint.json` (GPU 420MHz floor, Little 600MHz, Big 1000MHz, uclamp boost 15).
-   - Patched `ramdisk/etc/init.power.rc` (decoupled touchscreen inhibit from suspend lockup).
-   - Patched `ramdisk/etc/init.samsungexynos7420.rc` (ZRAM 2GB module loading, watchdog autorecovery disarm, governor floors).
-   - Added `ramdisk/bin/init.postboot.sh` executed by `vendor.postboot` root init service.
-   - Updated `ramdisk/Android.mk`, `device-common.mk`, and `sepolicy/vendor/file_contexts`.
+1. **Kernel (`SM_G92X`)**:
+   [https://github.com/eiarf/SM_G92X](https://github.com/eiarf/SM_G92X) (`lineage-22.2-android15-6.6`, `camera-v4l2-bringup`)
+   - V4L2/MediaController rear (`s5c73c2`/`s5k2p2`) + front (`s5k4e6`) camera pipeline, `ak7345`/`ak7375` AF VCM, `idg2030` OIS, `s2mpb02` FLED flash/torch, `exynos7-flite` SysMMU_CAM0 pass-through, `clk-exynos7` CAM/ISP PLL retention, and `cam_cma` (160 MiB reusable CMA).
+   - Panfrost Mali-T760 fixes (`panfrost_dump`, `panfrost_mmu`, 2000 ms timeout).
+   - Hardware bring-up: `max86900` heart-rate IIO, `sec_nfc` S3FWRN5 NFC (`/dev/sec-nfc`), BCM4773 SSP IR blaster, and `hsi2c_6` secure-pins recovery.
 
-2. **Device Tree (`zeroflte`)**:
-   [https://github.com/eiarf/android_device_samsung_zeroflte](https://github.com/eiarf/android_device_samsung_zeroflte)
-   - Documentation of device specifications, working hardware features, and camera HAL roadmap.
+2. **Common Device Tree (`universal7420-common`)**:
+   [https://github.com/eiarf/android_device_samsung_universal7420-common](https://github.com/eiarf/android_device_samsung_universal7420-common) (`lineage-22.2-KRNL6.6`, `camera-v4l2-aidl-hal`)
+   - AIDL V3 V4L2/SoftISP Camera HAL (`hardware/camera/`), `NK_HAS_CAMERA/NFC/GPS/IR=true`.
+   - Patched `powerhint.json`, `task_profiles.json` (ADPF), `init.power.rc`, `init.samsungexynos7420.rc`, `init.gps.rc`, `ueventd.samsungexynos7420.rc`, `init.postboot.sh`, `set_resolution.sh`, and SELinux policies.
 
-3. **Proprietary Vendor Blobs (`proprietary_vendor_samsung`)**:
+3. **Device Tree (`zeroflte`)**:
+   [https://github.com/eiarf/android_device_samsung_zeroflte](https://github.com/eiarf/android_device_samsung_zeroflte) (`lineage-22.2-KRNL6.6`)
+   - `WifiOverlay` BCM4358 compatibility overrides (disable suspend optimizations, FW roaming HAL, BT coex, connected MAC randomization).
+
+4. **Proprietary Vendor Blobs (`proprietary_vendor_samsung`)**:
    [https://github.com/eiarf/proprietary_vendor_samsung](https://github.com/eiarf/proprietary_vendor_samsung)
    - Vendor proprietary blobs, firmware files, and display/audio HAL dependencies for Exynos 7420 on Android 15.
 
@@ -48,10 +51,10 @@ All source modifications have been applied and pushed to the following repositor
   - **CPU Cluster Floors**: Set LITTLE cluster floor to **600 MHz** (`cpu0`) and BIG cluster floor to **1000 MHz** (`cpu4`).
   - **UCLAMP & PowerHAL Tuning**: Elevated top-app uclamp boost to `15.00` during user touch interactions in `powerhint.json`, delivering responsive 60 FPS transitions.
 
-### 4. Camera Status & Roadmap
-* **Current Status**: Not working (common to all initial LineageOS 22.x Kernel 6.6 ports for Exynos 7420).
-* **Technical Reason**: Exynos 7420 uses Samsung's proprietary FIMC-IS (Imaging Subsystem) ISP. Kernel 6.6 uses modern V4L2/Media Controller drivers which do not interface with the legacy 32-bit/64-bit Samsung Camera HAL1/HAL3 blobs without an updated camera provider AIDL adapter or wrapper library.
-* **Roadmap**: Porting an open-source libcamera / v4l2 camera HAL interface to bridge kernel 6.6 media device nodes to Android 15 AIDL camera provider.
+### 4. Camera, Graphics, Wi-Fi, GNSS, NFC, IR & Heart Rate Bring-Up
+* **Camera (`ICameraProvider/internal/0`)**: **WORKING** — AIDL V3 V4L2/SoftISP HAL + mainline 6.6 V4L2/MediaController pipeline (Rear 16MP `s5c73c2`/`s5k2p2`, Front 5MP `s5k4e6`, `ak7345` contrast AF, `idg2030` OIS, `s2mpb02` Flash/Torch, 1080p video).
+* **DRM/KMS + Panfrost GPU**: **WORKING** — `s6_kms_hwcomposer.cpp` (`drmModeAddFB2` XBGR8888), thread-safe 32/64-bit `s6_drm_gralloc.cpp`, Mesa 24.0.9 Panfrost, and kernel MMU/devcoredump/timeout fixes.
+* **GNSS, NFC, IR Blaster & MAX86900 Heart Rate**: **WORKING** — AIDL GNSS HAL + `gpsd`/`lhd` (`BCM4773`), AIDL NFC HAL + `S3FWRN5P` (`/dev/sec-nfc`), AIDL IR HAL (`irled_remote`), and MAX86900 optical IIO sub-HAL, all running under SELinux **Enforcing**.
 
 ---
 
