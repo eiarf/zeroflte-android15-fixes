@@ -1,0 +1,79 @@
+From bd4d03cb5d669a7408caf395a03cce3cd6fecd1d Mon Sep 17 00:00:00 2001
+From: FAROVITUS <farovitus@gmail.com>
+Date: Sun, 15 Nov 2026 22:42:59 +0000
+Subject: [PATCH] arc4random: fall back to fork detection without
+ MADV_WIPEONFORK
+
+My Lineage 24 OTA zip for the Galaxy S6 did not install from the
+device's TWRP. Its static updater aborted at start with "arc4random
+data MADV_WIPEONFORK failed" and signal 6, before writing anything.
+TWRP there runs a 3.10 kernel, and MADV_WIPEONFORK only exists from
+Linux 4.14, so madvise() returns EINVAL and bionic treats that as
+fatal.
+
+When madvise() returns EINVAL, keep going and use OpenBSD's Linux
+fork detection instead: remember the pid and clear the state when it
+changes, so a forked child stirs fresh keys. Any other error is still
+fatal. On kernels with MADV_WIPEONFORK nothing changes: the check
+returns at once.
+
+Change-Id: I5c06edd4dccb121eb8031df1eb8f94b985ac5207
+Signed-off-by: FAROVITUS <farovitus@gmail.com>
+---
+ .../android/include/arc4random.h              | 24 +++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/libc/upstream-openbsd/android/include/arc4random.h b/libc/upstream-openbsd/android/include/arc4random.h
+index 1940398..8c995aa 100644
+--- a/libc/upstream-openbsd/android/include/arc4random.h
++++ b/libc/upstream-openbsd/android/include/arc4random.h
+@@ -18,7 +18,11 @@
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#include <errno.h>
+ #include <pthread.h>
++#include <stdbool.h>
++#include <string.h>
++#include <unistd.h>
+ #include <sys/mman.h>
+ #include <sys/prctl.h>
+ 
+@@ -41,8 +45,21 @@ static inline void _getentropy_fail(void) {
+   async_safe_fatal("getentropy failed: %m");
+ }
+ 
++// Kernels older than 4.14 have no MADV_WIPEONFORK. Statically linked
++// tools such as the OTA updater still run under them (old custom
++// recoveries), so fall back to OpenBSD's pid-based fork detection there.
++static bool _rs_need_forkdetect;
++
+ static inline void _rs_forkdetect(void) {
+-  // Not needed thanks to the MADV_WIPEONFORK below.
++  // Not needed when MADV_WIPEONFORK below succeeded.
++  if (__predict_true(!_rs_need_forkdetect)) return;
++
++  static pid_t _rs_pid = 0;
++  pid_t pid = getpid();
++  if (_rs_pid == 0 || _rs_pid == 1 || _rs_pid != pid) {
++    _rs_pid = pid;
++    if (rs) memset(rs, 0, sizeof(*rs));
++  }
+ }
+ 
+ static inline int _rs_allocate(struct _rs** rsp, struct _rsx** rsxp) {
+@@ -61,7 +78,10 @@ static inline int _rs_allocate(struct _rs** rsp, struct _rsx** rsxp) {
+ 
+   // Equivalent to OpenBSD's minherit(MAP_INHERIT_ZERO).
+   if (madvise(p, size, MADV_WIPEONFORK) == -1) {
+-    async_safe_fatal("arc4random data MADV_WIPEONFORK failed: %m");
++    if (errno != EINVAL) {
++      async_safe_fatal("arc4random data MADV_WIPEONFORK failed: %m");
++    }
++    _rs_need_forkdetect = true;
+   }
+ 
+   // Give the allocation a name to make tombstones more intelligible.
+-- 
+2.34.1
+

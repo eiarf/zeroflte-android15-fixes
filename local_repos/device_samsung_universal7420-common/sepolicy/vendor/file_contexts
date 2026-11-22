@@ -1,0 +1,244 @@
+####################################
+# Daemons
+#
+
+/(vendor|system/vendor)/bin/sensorhubservice  u:object_r:sensorhubservice_exec:s0
+
+# files in /system
+/system/bin/move_widevine_data\.sh            u:object_r:move-widevine-data-sh_exec:s0
+
+####################################
+# Data Files
+
+# Biometrics
+/data/biometrics(/.*)?            u:object_r:fingerprintd_data_file:s0
+
+# Camera
+/data/camera(/.*)?                u:object_r:camera_data_file:s0
+/data/vendor/camera(/.*)?         u:object_r:camera_vendor_data_file:s0
+
+# CAS
+/data/\.cas(/.*)?                 u:object_r:cas_data_file:s0
+
+# DRM
+/data/vendor/mediadrm(/.*)?       u:object_r:mediadrm_vendor_data_file:s0
+
+# GPS
+/data/system/gps(/.*)?            u:object_r:gps_data_file:s0
+
+# Mobicore
+/data/app/mcRegistry(/.*)?        u:object_r:mobicore_data_file:s0
+/data/misc/mcRegistry(/.*)?       u:object_r:mobicore_data_file:s0
+
+# NFC
+/data/nfc(/.*)?                   u:object_r:nfc_data_file:s0
+/data/vendor/nfc(/.*)?            u:object_r:nfc_vendor_data_file:s0
+
+# Wi-fi: init.wifi.rc creates /data/misc/conn and writes its .*.info
+# files from vendor_init. Label the directory so new files inherit it.
+/data/misc/conn(/.*)?              u:object_r:wifi_data_file:s0
+
+##########################
+# Devices
+#
+/dev/block/zram0             u:object_r:swap_block_device:s0
+
+/dev/m2m1shot_scaler[0-9]*   u:object_r:video_device:s0
+/dev/mali[0-9]*              u:object_r:gpu_device:s0
+/dev/media[0-3]*             u:object_r:camera_device:s0
+/dev/m2m1shot_jpeg           u:object_r:camera_device:s0
+/dev/mtp_usb*                u:object_r:mtp_device:s0
+/dev/s5p-smem                u:object_r:secmem_device:s0
+/dev/rfkill                  u:object_r:rfkill_device:s0
+/dev/seiren                  u:object_r:seiren_device:s0
+/dev/v4l-subdev[0-9]*        u:object_r:video_device:s0
+/dev/vfsspi                  u:object_r:fingerprint_device:s0
+/dev/__cbd_msg_              u:object_r:mif_device:s0
+/dev/umts.*                  u:object_r:mif_device:s0
+/dev/ehci_power              u:object_r:mif_device:s0
+/dev/mipi-lli                u:object_r:mif_device:s0
+
+####################################
+# Efs Files
+
+/cpefs(/.*)?                  u:object_r:sec_efs_file:s0
+
+/efs/cpdebug(.*)              u:object_r:cpdebug_efs_file:s0
+/efs/FactoryApp(/.*)?         u:object_r:app_efs_file:s0
+/efs/FactoryApp/baro_delta    u:object_r:baro_delta_factoryapp_efs_file:s0
+/efs/FactoryApp/factorymode   u:object_r:factorymode_factoryapp_efs_file:s0
+/efs/FactoryApp/fdata         u:object_r:radio_factoryapp_efs_file:s0
+/efs/FactoryApp/gyro_cal_data u:object_r:sensor_factoryapp_efs_file:s0
+/efs/FactoryApp/hist_nv       u:object_r:radio_factoryapp_efs_file:s0
+/efs/FactoryApp/prox_cal      u:object_r:sensor_factoryapp_efs_file:s0
+/efs/FactoryApp/test_nv       u:object_r:radio_factoryapp_efs_file:s0
+/efs/maxim(/.*)?              u:object_r:sec_efs_file:s0
+/efs/nv\.log                  u:object_r:bin_nv_data_efs_file:s0
+/efs/ota(/.*)?                u:object_r:ota_efs_file:s0
+/efs/recovery(/.*)?           u:object_r:sec_efs_file:s0
+/efs/sec_efs(/.*)?            u:object_r:sec_efs_file:s0
+/efs/SMS(/.*)?                u:object_r:sec_efs_file:s0
+/efs/ssm(.*)                  u:object_r:ssm_efs_file:s0
+/efs/TEE(/.*)?                u:object_r:gatekeeper_efs_file:s0
+/efs/wv\.keys                 u:object_r:cpk_efs_file:s0
+
+####################################
+# HIDL
+#
+
+/(vendor|system/vendor)/bin/hw/android\.hardware\.audio\.service                         u:object_r:hal_audio_default_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.gnss-service\.universal7420           u:object_r:hal_gnss_default_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.ir-service\.universal7420             u:object_r:hal_ir_default_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.gatekeeper@1\.0-service\.software       u:object_r:hal_gatekeeper_default_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.vibrator-service\.universal7420        u:object_r:hal_vibrator_default_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.light-service\.universal7420           u:object_r:hal_light_default_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.nfc-service\.exynos7420               u:object_r:hal_nfc_default_exec:s0
+
+####################################
+# Same-process HAL files and their dependencies
+#
+
+/(vendor|system/vendor)/lib(64)?/egl/libGLES_mali\.so           u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/libglapi\.so                  u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/libgbm.*\.so                  u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/libc\+\+_shared\.so           u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/dri/.*                        u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/libgallium_dri\.so            u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/hw/gralloc\.minigbm\.so       u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/hw/mapper\.minigbm\.so        u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/libminigbm_gralloc\.so         u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/libminigbm_gralloc4_utils\.so u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/lib(64)?/libdrm\.so                     u:object_r:same_process_hal_file:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.graphics\.allocator-service\.minigbm u:object_r:hal_graphics_allocator_default_exec:s0
+/(vendor|system/vendor)/lib(64)?/vulkan\.[a-z0-9]*\.so          u:object_r:same_process_hal_file:s0
+
+####################################
+# Sysfs
+
+# Audio Codec
+/sys/devices/virtual/dsm/maxdsm_cal(/.*)?        u:object_r:sysfs_dsm:s0
+/sys/devices/virtual/dsm/max98505(/.*)?          u:object_r:sysfs_codec:s0
+
+# Audio Earsmart IC
+/sys/class/earsmart(/.*)?                        u:object_r:sysfs_earsmart:s0
+/sys/devices/virtual/earsmart(/.*)?              u:object_r:sysfs_earsmart:s0
+
+# Block/Storage
+/sys/devices/platform/soc@0/15570000\.ufs/host0/power(/.*)?                                       u:object_r:sysfs_mmc:s0
+/sys/devices/platform/soc@0/15570000\.ufs/host0/target0:0:0/0:0:0:0/block/sd[a-z]/queue(/.*)?   u:object_r:sysfs_io_sched_tuneable:s0
+
+# Bluetooth
+/sys/devices/bluetooth.[0-9]+/rfkill/rfkill0/state  u:object_r:sysfs_bluetooth_writable:s0
+/sys/devices/bluetooth.[0-9]+//rfkill/rfkill0/type   u:object_r:sysfs_bluetooth_writable:s0
+/sys/class/rfkill/rfkill0/state              u:object_r:sysfs_bluetooth_writable:s0
+/sys/class/rfkill/rfkill0/type               u:object_r:sysfs_bluetooth_writable:s0
+
+# Camera
+/sys/class/camera(/.*)?                      u:object_r:sysfs_camera:s0
+
+# Cbd
+/sys/firmware/devicetree/base/model_info-system_rev    u:object_r:sysfs_socinfo:s0
+
+# DevFreq
+/sys/devices/platform/soc@0/14ac0000\.gpu/devfreq/14ac0000\.gpu(/.*)?          u:object_r:sysfs_devfreq:s0
+
+# Fingerprint
+/sys/devices/virtual/fingerprint/fingerprint(/.*)?  u:object_r:sysfs_fingerprint:s0
+
+# Graphics/Panel
+/sys/devices/[0-9]+\.dsim/lcd/panel(/.*)?           u:object_r:sysfs_graphics:s0
+
+# Grip
+/sys/class/sensors/grip_sensor(/.*)?                 u:object_r:sysfs_grip:s0
+
+# HMT relay mode node
+/sys/devices/virtual/relay_on                       u:object_r:sysfs_hmt:s0
+
+# HRM
+/sys/class/sensors/hrm_sensor(/.*)?                 u:object_r:sysfs_hrm:s0
+
+# IIO
+/sys/bus/iio/devices(/.*)?                                                            u:object_r:sysfs_iio:s0
+/sys/devices/[a-f0-9]+\.adc/iio:device[0-9](/.*)?                                     u:object_r:sysfs_iio:s0
+/sys/devices/[a-f0-9]+\.spi/spi_master/spi[0-9]+/spi[0-9]+\.0/iio:device[0-9]+(/.*)?  u:object_r:sysfs_spi_writeable:s0
+
+# Lights
+/sys/devices/[0-9]+\.dsim/backlight/panel(/.*)?                                 u:object_r:sysfs_backlight_writable:s0
+/sys/devices/[0-9]+\.hsi2c/i2c-[0-9]+/[0-9]+-[0-9]+/leds-max77833-rgb(/.*)?     u:object_r:sysfs_light:s0
+/sys/devices/[0-9]+\.hsi2c/i2c-[0-9]+/[0-9]+-[0-9]+/leds-max77843-rgb(/.*)?     u:object_r:sysfs_light:s0
+/sys/devices/[0-9]+\.hsi2c/i2c-[0-9]+/[0-9]+-[0-9]+/s2mpb02-led(/.*)?           u:object_r:sysfs_light:s0
+# NK 6.6 kernel: mainline panel backlight, MAX77843 multicolor LED, touchkey
+/sys/devices/platform/soc@0/13900000\.dsi/13900000\.dsi\.0/backlight/s6e3ha2(/.*)?          u:object_r:sysfs_backlight_writable:s0
+/sys/devices/platform/i2c-max77843/i2c-[0-9]+/[0-9]+-0066/max77843-led/leds(/.*)?         u:object_r:sysfs_light:s0
+/sys/devices/platform/i2c-touchkey/i2c-[0-9]+/[0-9]+-0020/sec/sec_touchkey(/.*)?          u:object_r:sysfs_sec_touchkey:s0
+
+# mDNIe
+/sys/devices/[0-9]+\.dsim/lcd/panel/mdnie(/.*)                         u:object_r:sysfs_mdnie:s0 
+
+# MFC
+/sys/devices/[a-f0-9]+\.mfc0/video8(/.*)?                              u:object_r:sysfs_mfc:s0
+
+# MFD node
+/sys/module/sec_core/parameters(/.*)?                                  u:object_r:sysfs_sec_mfd:s0
+
+# MST node
+/sys/devices/virtual/mstldo(/.*)                                       u:object_r:sysfs_mst:s0
+
+# Power
+/sys/power/rtc_status                                                  u:object_r:sysfs_power:s0
+
+# Rild
+/sys/devices/virtual/misc/multipdp(/.*)                                u:object_r:sysfs_multipdp:s0
+
+# Rtc
+/sys/devices/[0-9]+\.hsi2c/i2c-[0-9]+/[0-9]+-[a-z0-9]+/s2m-rtc(/.*)    u:object_r:sysfs_rtc:s0
+
+# SEC
+/sys/devices/virtual/sec/sec_key(/.*)?            u:object_r:sysfs_sec_key:s0
+/sys/devices/virtual/sec/sec_touchkey(/.*)?       u:object_r:sysfs_sec_touchkey:s0
+/sys/devices/virtual/sec/tsp(/.*)?                u:object_r:sysfs_sec_tsp:s0
+/sys/devices/virtual/sec/ts(/.*)?                 u:object_r:sysfs_sec_ts:s0
+/sys/devices/virtual/sec/sec_barcode_emul(/.*)?   u:object_r:sysfs_sec_barcode_emul:s0
+/sys/devices/virtual/sec/sensorhub(/.*)?          u:object_r:sysfs_sec_sensorhub:s0
+/sys/devices/virtual/sec/led(/.*)?                u:object_r:sysfs_sec_led:s0
+/sys/devices/virtual/sec/gps(/.*)?                u:object_r:sysfs_sec_gps:s0
+/sys/devices/virtual/sec/wlan(/.*)?               u:object_r:sysfs_sec_wlan:s0 
+/sys/devices/virtual/sec/bsp(/.*)?                u:object_r:sysfs_sec_bsp:s0 
+/sys/devices/virtual/sec/motor(/.*)?              u:object_r:sysfs_sec_motor:s0 
+/sys/devices/virtual/sec/sdcard(/.*)?             u:object_r:sysfs_sec_sdcard:s0 
+/sys/devices/virtual/sec/sddata(/.*)?             u:object_r:sysfs_sec_sddata:s0 
+/sys/devices/virtual/sec/sdinfo(/.*)?             u:object_r:sysfs_sec_sdinfo:s0 
+/sys/devices/virtual/sec/sec_heavy_cpu(/.*)?      u:object_r:sysfs_sec_sec_heavy_cpu:s0 
+/sys/devices/virtual/sec/sec-pa-thermistor(/.*)?  u:object_r:sysfs_sec_pa_thermistor:s0 
+/sys/devices/virtual/sec/sec-ap-thermistor(/.*)?  u:object_r:sysfs_sec_ap_thermistor:s0 
+
+# SecureOS node
+/sys/devices/system/sec_os_ctrl(/.*)?             u:object_r:sysfs_sec_secureos:s0
+
+# SSP
+/sys/devices/virtual/sensors/ssp_sensor(/.*)?     u:object_r:sysfs_ssp:s0
+
+# Thermal
+/sys/devices/virtual/thermal(/.*)?                u:object_r:sysfs_thermal:s0
+/sys/devices/virtual/hwmon/hwmon[0-3](/.*)        u:object_r:sysfs_thermal:s0
+
+# USB 
+/sys/devices/virtual/host_notify/usb_otg(/.*)?    u:object_r:sysfs_usb_otg:s0
+/sys/devices/virtual/usb_notify/usb_control(/.*)? u:object_r:sysfs_usb_otg:s0
+
+# Touchscreen & Postboot
+/(vendor|system/vendor)/bin/init\.touch\.sh     u:object_r:init_touch_sh_exec:s0
+/(vendor|system/vendor)/bin/init\.postboot\.sh  u:object_r:init_postboot_sh_exec:s0
+
+# ODM: vendor is inside system here, so the odm files sit at
+# /system/vendor/odm, which AOSP's (odm|vendor/odm) entries miss.
+/system/vendor/odm/etc(/.*)?                                    u:object_r:vendor_configs_file:s0
+/system/vendor/odm/etc/selinux/odm_sepolicy\.cil                u:object_r:sepolicy_file:s0
+/system/vendor/odm/etc/selinux/odm_file_contexts                u:object_r:file_contexts_file:s0
+/system/vendor/odm/etc/selinux/odm_seapp_contexts               u:object_r:seapp_contexts_file:s0
+/system/vendor/odm/etc/selinux/odm_property_contexts            u:object_r:property_contexts_file:s0
+/system/vendor/odm/etc/selinux/odm_service_contexts             u:object_r:vendor_service_contexts_file:s0
+/system/vendor/odm/etc/selinux/odm_hwservice_contexts           u:object_r:hwservice_contexts_file:s0
+/system/vendor/odm/etc/selinux/odm_keystore2_key_contexts       u:object_r:keystore2_key_contexts_file:s0
+/system/vendor/odm/etc/selinux/odm_mac_permissions\.xml         u:object_r:mac_perms_file:s0
+/system/vendor/odm/etc/selinux/odm_tee_service_contexts         u:object_r:tee_service_contexts_file:s0

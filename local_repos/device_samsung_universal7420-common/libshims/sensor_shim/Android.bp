@@ -1,0 +1,13 @@
+cc_library_shared {
+    name: "sensor_shim",
+    proprietary: true,
+
+    srcs: [
+	    "sensor_shim.cpp",
+    ],
+
+    shared_libs: [
+        "liblog",
+        "libutils",
+    ],
+}

@@ -1,0 +1,206 @@
+From: zeroflte-rising17 <eiarf@users.noreply.github.com>
+Subject: [PATCH] gms: slim pico gapps and use AOSP SetupWizard for 3GB RAM and small system
+
+diff --git a/gms_pico.mk b/gms_pico.mk
+index 78c3986..93dd196 100644
+--- a/gms_pico.mk
++++ b/gms_pico.mk
+@@ -15,6 +15,12 @@
+ # limitations under the License.
+ #
+ #
++# Slimmed PICO profile for 3GB RAM / ~3GB SYSTEM partition devices (zeroflte):
++# Keeps Play Services (gmssystem.prodvic APEX + PrebuiltGmsCoreVic_*),
++# Play Store (Phonesky), GSF, SetupWizard, Restore, SettingsIntelligence,
++# WebViewGoogle + TrichromeLibrary, DocumentsUIGoogle, and TagGoogle.
++# Drops Pixel AI/TTS/TalkBack/Assistant/Wellbeing/replaceable Google apps
++# (~1.3 GiB saved in /system + hundreds of MB saved in background RAM).
+ 
+ # APEX
+ DISABLE_DEXPREOPT_CHECK := true
+@@ -23,49 +29,27 @@ PRODUCT_PACKAGES += \
+     com.google.android.gmssystem.prodvic
+ 
+ # Quick Tap
+-TARGET_SUPPORTS_QUICK_TAP ?= true
++TARGET_SUPPORTS_QUICK_TAP ?= false
+ ifeq ($(TARGET_SUPPORTS_QUICK_TAP),true)
+ PRODUCT_PACKAGES += \
+     quick_tap
+ endif
+ 
+-# product/app
++# product/app (WebViewGoogle + TrichromeLibrary kept for system WebView)
+ PRODUCT_PACKAGES += \
+-    CalculatorGooglePrebuilt_85011599 \
+-    Chrome \
+-    Chrome-Stub \
+-    GoogleContacts \
+-    GoogleTTS \
+-    LatinIMEGooglePrebuilt \
+-    LocationHistoryPrebuilt \
+-    MarkupGoogle_v2 \
+-    PixelThemesStub2026 \
+-    SoundPickerPrebuilt_3.4 \
+     TrichromeLibrary \
+     TrichromeLibrary-Stub \
+     WebViewGoogle \
+-    WebViewGoogle-Stub \
+-    talkback
++    WebViewGoogle-Stub
+ 
+-# product/priv-app
++# product/priv-app (Core GMS, Play Store, Setup & Sync only)
+ PRODUCT_PACKAGES += \
+-    AndroidAutoStubPrebuilt \
+     ConfigUpdater \
+-    DeviceIntelligenceNetworkPrebuiltAstrea \
+-    GoogleDialer \
+-    GoogleRestorePrebuilt-v1054408 \
+-    KidsSupervisionStub \
+     OdadPrebuilt \
+     PartnerSetupPrebuilt \
+     Phonesky \
+-    PrebuiltDeskClockGoogle_76060331 \
+-    PrebuiltPixelCoreServices \
+     SettingsIntelligenceGooglePrebuilt \
+-    SetupWizardPrebuilt_cd1a \
+-    TurboPrebuilt \
+-    VelvetGo \
+-    VerifierPrebuiltClassic \
+-    WellbeingPrebuilt
++    VerifierPrebuiltClassic
+ 
+ # system/app
+ PRODUCT_PACKAGES += \
+@@ -77,21 +61,10 @@ PRODUCT_PACKAGES += \
+     DocumentsUIGoogle \
+     TagGoogle
+ 
+-# system_ext/app
+-PRODUCT_PACKAGES += \
+-    EmergencyInfoGoogleNoUi \
+-    Flipendo
+-
+ # system_ext/priv-app
+ PRODUCT_PACKAGES += \
+-    AvatarPickerGoogle \
+     GoogleFeedback \
+     GoogleServicesFramework \
+-    MoseyApp \
+-    NexusLauncherRelease \
+-    SetupWizardPixelPrebuilt_cd1a \
+-    StorageManagerGoogle \
+-    WallpaperPickerGoogleRelease
+ 
+ # PrebuiltGmsCore
+ PRODUCT_PACKAGES += \
+diff --git a/product/blobs/product_blobs.mk b/product/blobs/product_blobs.mk
+index 368bc88..df84e5d 100644
+--- a/product/blobs/product_blobs.mk
++++ b/product/blobs/product_blobs.mk
+@@ -182,103 +182,4 @@ PRODUCT_PACKAGES += \
+ PRODUCT_PACKAGES += \
+     com.google.android.dialer.support
+ 
+-# IME
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/share/ime/google/d3_lms/ko_2018030706.zip:$(TARGET_COPY_OUT_PRODUCT)/usr/share/ime/google/d3_lms/ko_2018030706.zip \
+-    vendor/gms/product/blobs/usr/share/ime/google/d3_lms/mozc.data:$(TARGET_COPY_OUT_PRODUCT)/usr/share/ime/google/d3_lms/mozc.data \
+-    vendor/gms/product/blobs/usr/share/ime/google/d3_lms/zh_CN_2018030706.zip:$(TARGET_COPY_OUT_PRODUCT)/usr/share/ime/google/d3_lms/zh_CN_2018030706.zip
+-
+-# AccousticModel
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/LARGE_RNNT_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_mean_stddev:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/LARGE_RNNT_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_mean_stddev \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/LARGE_RNNT_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_model:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/LARGE_RNNT_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_model \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/MARBLE_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_mean_stddev:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/MARBLE_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_mean_stddev \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/MARBLE_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_model:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/MARBLE_VOICE_ACTIONS_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_model \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_mean_stddev:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_mean_stddev \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_model:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND.endpointer_portable_lstm_model \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND_LANGID.endpointer_portable_lstm_mean_stddev:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND_LANGID.endpointer_portable_lstm_mean_stddev \
+-    vendor/gms/product/blobs/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND_LANGID.endpointer_portable_lstm_model:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/acousticmodel/SODA_DICTATION_EP_UNIFIED_FRONTEND_LANGID.endpointer_portable_lstm_model
+-
+-# Accoustic Configs
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/configs/LANGUAGE_IDENTIFICATION.config:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/configs/LANGUAGE_IDENTIFICATION.config \
+-    vendor/gms/product/blobs/usr/srec/en-US/configs/ONDEVICE_MEDIUM_CONTINUOUS.config:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/configs/ONDEVICE_MEDIUM_CONTINUOUS.config \
+-    vendor/gms/product/blobs/usr/srec/en-US/configs/ONDEVICE_MEDIUM_SHORT_compiler.config:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/configs/ONDEVICE_MEDIUM_SHORT_compiler.config \
+-    vendor/gms/product/blobs/usr/srec/en-US/configs/ONDEVICE_MEDIUM_SHORT.config:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/configs/ONDEVICE_MEDIUM_SHORT.config \
+-    vendor/gms/product/blobs/usr/srec/en-US/configs/ONDEVICE_MEDIUM_VOICE_MATCH.config:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/configs/ONDEVICE_MEDIUM_VOICE_MATCH.config \
+-    vendor/gms/product/blobs/usr/srec/en-US/configs/ONDEVICE_SPEAKER_TURN_DETECTION.config:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/configs/ONDEVICE_SPEAKER_TURN_DETECTION.config
+-
+-# Accoustic Context
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/songs.txt:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/songs.txt \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/apps.txt:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/apps.txt \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/contacts.txt:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/contacts.txt \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/en-US_android-auto_car_automation.action.union_STD_FST.fst:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/en-US_android-auto_car_automation.action.union_STD_FST.fst \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/en-US_android-auto_manual_fixes_STD_FST.fst:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/en-US_android-auto_manual_fixes_STD_FST.fst \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/en-US_android-auto_top_radio_station_frequencies_STD_FST.fst:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/en-US_android-auto_top_radio_station_frequencies_STD_FST.fst \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/SODA.prebuilt_class_archive.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/SODA.prebuilt_class_archive.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/context_prebuilt/SODA.prebuilt_class_archive.syms:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/context_prebuilt/SODA.prebuilt_class_archive.syms
+-
+-# Accoustic Denorm
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_class_denorm.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_class_denorm.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_covid_19.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_covid_19.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_fix_ampm.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_fix_ampm.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_normalizer_no_emoticons_no_spoken_punc.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_normalizer_no_emoticons_no_spoken_punc.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_normalizer_only_emojis.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_normalizer_only_emojis.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_normalizer_only_spoken_punctuation.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_normalizer_only_spoken_punctuation.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_replace_annotated_emoticon_words_dash.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_replace_annotated_emoticon_words_dash.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/embedded_replace_annotated_punct_words_dash_no_emoticons.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/embedded_replace_annotated_punct_words_dash_no_emoticons.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/porn_normalizer_on_device.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/porn_normalizer_on_device.mfar \
+-    vendor/gms/product/blobs/usr/srec/en-US/denorm/remove_spoken_punc_formatting.mfar:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/denorm/remove_spoken_punc_formatting.mfar
+-
+-# Accoustic diarization
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.decoder:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.decoder \
+-    vendor/gms/product/blobs/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.encoder:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.encoder \
+-    vendor/gms/product/blobs/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.joint_model:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.joint_model \
+-    vendor/gms/product/blobs/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.mean_stddev:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.mean_stddev \
+-    vendor/gms/product/blobs/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.syms:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/diarization/SODA_SPEAKER_TURN.scd.syms
+-
+-# Accoustic EndToEnd
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/large_continuous_frontend_params.mean_stddev:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/large_continuous_frontend_params.mean_stddev \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/large_short_frontend_params.mean_stddev:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/large_short_frontend_params.mean_stddev \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/medium-decoder.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/medium-decoder.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/medium-encoder.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/medium-encoder.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/medium-joint_posterior.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/medium-joint_posterior.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/medium-joint_prior.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/medium-joint_prior.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/medium-rank_candidates_acoustic.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/medium-rank_candidates_acoustic.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/medium.syms.compact:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/medium.syms.compact \
+-    vendor/gms/product/blobs/usr/srec/en-US/endtoendmodel/medium.wpm.portable:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/endtoendmodel/medium.wpm.portable
+-
+-# Accoustic langid
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/langid/application_params_langid_stream_multiclass_ONDEVICE:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/langid/application_params_langid_stream_multiclass_ONDEVICE \
+-    vendor/gms/product/blobs/usr/srec/en-US/langid/ONDEVICE_langid.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/langid/ONDEVICE_langid.tflite
+-
+-# Accoustic MagicMic
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/magic_mic/MARBLE_V2_acoustic_meanstddev_vector:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/magic_mic/MARBLE_V2_acoustic_meanstddev_vector \
+-    vendor/gms/product/blobs/usr/srec/en-US/magic_mic/MARBLE_V2_acoustic_model.int8.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/magic_mic/MARBLE_V2_acoustic_model.int8.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/magic_mic/MARBLE_V2_model.int8.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/magic_mic/MARBLE_V2_model.int8.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/magic_mic/MARBLE_V2_vocabulary.syms:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/magic_mic/MARBLE_V2_vocabulary.syms \
+-
+-# Accoustic VoiceMatch
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/voice_match/MARBLE_speakerid.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/voice_match/MARBLE_speakerid.tflite \
+-    vendor/gms/product/blobs/usr/srec/en-US/voice_match/MARBLE_voice_filter.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/voice_match/MARBLE_voice_filter.tflite
+-
+-# Voice Match Configs
+-PRODUCT_COPY_FILES += \
+-    vendor/gms/product/blobs/usr/srec/en-US/config.pumpkin:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/config.pumpkin \
+-    vendor/gms/product/blobs/usr/srec/en-US/g2p:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/g2p \
+-    vendor/gms/product/blobs/usr/srec/en-US/g2p_phonemes.syms:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/g2p_phonemes.syms \
+-    vendor/gms/product/blobs/usr/srec/en-US/g2p.syms:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/g2p.syms \
+-    vendor/gms/product/blobs/usr/srec/en-US/metadata:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/metadata \
+-    vendor/gms/product/blobs/usr/srec/en-US/monastery_config.pumpkin:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/monastery_config.pumpkin \
+-    vendor/gms/product/blobs/usr/srec/en-US/offline_action_data.pb:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/offline_action_data.pb \
+-    vendor/gms/product/blobs/usr/srec/en-US/pumpkin.mmap:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/pumpkin.mmap \
+-    vendor/gms/product/blobs/usr/srec/en-US/semantics.pumpkin:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/semantics.pumpkin \
+-    vendor/gms/product/blobs/usr/srec/en-US/SODA_punctuation_config.pb:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/SODA_punctuation_config.pb \
+-    vendor/gms/product/blobs/usr/srec/en-US/SODA_punctuation_model.tflite:$(TARGET_COPY_OUT_PRODUCT)/usr/srec/en-US/SODA_punctuation_model.tflite \
++# IME d3_lms and offline usr/srec models omitted (~107 MiB saved for 3GB system/RAM)

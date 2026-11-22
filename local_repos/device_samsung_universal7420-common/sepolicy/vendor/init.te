@@ -1,0 +1,74 @@
+# init.te
+
+allow init efs_block_device:blk_file relabelto;
+# The by-name/EFS symlink matches the same file_contexts entry, so
+# restorecon of /dev gives it that type as well.
+allow init efs_block_device:lnk_file relabelto;
+# The same for by-name/CACHE, which is the metadata partition.
+allow init metadata_block_device:lnk_file relabelto;
+
+# Bind mount files on /system
+allow init system_file:file mounton;
+
+# Mount EFS on /efs
+allow init efs_file:dir  mounton;
+
+# Mount CPEFS on /cpefs
+allow init sec_efs_file:dir mounton;
+
+# Allow to reboot to recovery
+allow init ota_block_device:blk_file rw_file_perms;
+
+allow init sysfs_scsi_host:dir relabelfrom;
+allow init sysfs_scsi_host:file relabelfrom;
+
+# Sockets
+allow init socket_device:sock_file { read write getattr setattr create unlink };
+allow init node:tcp_socket node_bind;
+allow init self:netlink_kobject_uevent_socket { bind create setopt };
+allow init dnsproxyd_socket:sock_file write;
+allow init fwmarkd_socket:sock_file write;
+allow init netd:unix_stream_socket connectto;
+allow init port:tcp_socket { name_bind name_connect };
+allow init self:tcp_socket { bind connect create write getopt read };
+
+allow init fwk_sensor_hwservice:hwservice_manager find;
+allow init hidl_base_hwservice:hwservice_manager add;
+
+unix_socket_connect(init, property, rild)
+
+# GPS
+allow init gps_data_file:fifo_file write;
+
+# Proc
+allow init proc_simslot_count:file rw_file_perms;
+allow init proc_reset_reason:file { rw_file_perms setattr };
+allow init proc_vm:file rw_file_perms;
+allow init proc_sec:file { rw_file_perms setattr };
+
+# Allow access to /proc/device-tree nodes
+r_dir_file(init, proc_dt_firmware)
+
+#audit2allow
+allow init hwservicemanager:binder { call transfer };
+allow init kernel:system module_request;
+allow init sysfs_batteryinfo:file setattr;
+allow init sysfs_wifi_writable:file { open write };
+allow init system_server:binder { call transfer };
+allow init vndbinder_device:chr_file { ioctl open read write };
+
+# init.rc writes queue/discard_max_bytes of the userdata disk.
+allow init sysfs_block:file w_file_perms;
+allow init sysfs_zram:file w_file_perms;
+
+# Touchscreen and touchkey power-down: init.power.rc writes their
+# inhibited.
+allow init { sysfs_stmfts sysfs_sec_touchkey }:file w_file_perms;
+
+# wifi.rc and bootreceiver.rc write the enable files of tracefs instance
+# events. On 6.6 those files live in eventfs, which makes their dentries
+# only on lookup. An O_CREAT open of a name not yet in the dcache checks
+# create permission on the directory before the lookup finds the file, so
+# every first write logs a write denial on the directory although the
+# write itself succeeds. Do not grant directory write; only stop auditing it.
+dontaudit init { debugfs_wifi_tracing debugfs_bootreceiver_tracing }:dir write;

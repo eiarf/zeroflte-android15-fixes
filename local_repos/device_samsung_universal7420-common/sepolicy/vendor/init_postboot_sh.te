@@ -1,0 +1,32 @@
+# init.postboot.sh: post-boot display scaling (FHD 1080p) and sysfs fallbacks
+type init_postboot_sh, domain;
+type init_postboot_sh_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(init_postboot_sh)
+
+allow init_postboot_sh vendor_shell_exec:file rx_file_perms;
+allow init_postboot_sh vendor_toolbox_exec:file rx_file_perms;
+allow init_postboot_sh shell_exec:file rx_file_perms;
+allow init_postboot_sh toolbox_exec:file rx_file_perms;
+allow init_postboot_sh system_file:file rx_file_perms;
+
+# cmd window size/density over binder
+binder_use(init_postboot_sh)
+binder_call(init_postboot_sh, system_server)
+allow init_postboot_sh window_service:service_manager find;
+
+# sysfs/proc post-boot fallbacks (watchdog disarm, zram, cpufreq, gpu, stmfts)
+allow init_postboot_sh proc:file r_file_perms;
+allow init_postboot_sh proc_vm:file rw_file_perms;
+allow init_postboot_sh sysfs:file rw_file_perms;
+allow init_postboot_sh sysfs_devices_system_cpu:file rw_file_perms;
+allow init_postboot_sh sysfs_devfreq_dir:dir r_dir_perms;
+allow init_postboot_sh sysfs_devfreq:file rw_file_perms;
+allow init_postboot_sh sysfs_zram:dir r_dir_perms;
+allow init_postboot_sh sysfs_zram:file rw_file_perms;
+allow init_postboot_sh sysfs_stmfts:dir r_dir_perms;
+allow init_postboot_sh sysfs_stmfts:file rw_file_perms;
+allow init_postboot_sh rootfs:dir r_dir_perms;
+
+get_prop(init_postboot_sh, vendor_hwc_prop)
+set_prop(init_postboot_sh, vendor_hwc_prop)

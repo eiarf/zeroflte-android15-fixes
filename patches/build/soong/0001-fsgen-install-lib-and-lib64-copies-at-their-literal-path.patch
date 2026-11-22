@@ -1,0 +1,46 @@
+From 83c00b15fbc29da2133fe3b3f95d2e6619053674 Mon Sep 17 00:00:00 2001
+From: FAROVITUS <farovitus@gmail.com>
+Date: Wed, 11 Nov 2026 20:33:58 +0000
+Subject: [PATCH] fsgen: install lib and lib64 copies at their literal path
+
+My device keeps its vendor blobs in the system image, and its blob list
+copies some of them to both lib/ and lib64/. fsgen turns each copy into a
+generated prebuilt module, and for lib/ and lib64/ it picks a module type
+that builds both arch variants and puts the 64-bit one in lib64/, so the
+two copies of one blob collide with each other and the build stops.
+
+Install copies into lib/ and lib64/ with prebuilt_any at the literal
+destination path instead. Every Lineage 22.2 zeroflte ROM I built had
+this change; I made it in the build tree on 2026-11-11 and it was never
+saved anywhere else until now.
+
+Change-Id: I52f53f324fe2268e098c2101a7c6ed45e66f6f75
+Signed-off-by: FAROVITUS <farovitus@gmail.com>
+---
+ fsgen/prebuilt_etc_modules_gen.go | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/fsgen/prebuilt_etc_modules_gen.go b/fsgen/prebuilt_etc_modules_gen.go
+index 99046a3..1bbd420 100644
+--- a/fsgen/prebuilt_etc_modules_gen.go
++++ b/fsgen/prebuilt_etc_modules_gen.go
+@@ -376,6 +376,16 @@ func createPrebuiltEtcModulesInDirectory(ctx android.LoadHookContext, partition,
+ 		moduleFactory := etcInstallPathToFactoryList[etcInstallPathKey]
+ 		relDestDirFromInstallDirBase, _ := filepath.Rel(etcInstallPathKey, destDir)
+ 
++		// A copy into lib/ or lib64/ installs one file at that exact path. The
++		// bitcode module type builds both arch variants and puts the 64-bit one
++		// in lib64/, so a blob copied to both lib/ and lib64/ (common on devices
++		// whose vendor files live in the system image) collides with itself.
++		// Install these with prebuilt_any at the literal destination instead.
++		if etcInstallPathKey == "lib" || etcInstallPathKey == "lib64" {
++			moduleFactory = etc.PrebuiltAnyFactory
++			relDestDirFromInstallDirBase = destDir
++		}
++
+ 		// Extract owner data from the first tuple in the current group
+ 		var destOwner string
+ 		if len(srcTuple) > 0 {
+-- 
+2.34.1
+

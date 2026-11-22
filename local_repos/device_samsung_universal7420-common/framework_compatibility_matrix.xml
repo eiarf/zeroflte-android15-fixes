@@ -1,0 +1,15 @@
+<compatibility-matrix version="1.0" type="framework">
+    <!-- The Widevine blob only serves HIDL drm 1.1; FCM 7 and up accept 1.3-4. -->
+    <hal format="hidl" optional="true">
+        <name>android.hardware.drm</name>
+        <version>1.0-4</version>
+        <interface>
+            <name>ICryptoFactory</name>
+            <regex-instance>.*</regex-instance>
+        </interface>
+        <interface>
+            <name>IDrmFactory</name>
+            <regex-instance>.*</regex-instance>
+        </interface>
+    </hal>
+</compatibility-matrix>

@@ -1,0 +1,463 @@
+#
+# Copyright (C) 2020 The LineageOS Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+COMMON_PATH := device/samsung/universal7420-common
+
+include $(COMMON_PATH)/nk_features.mk
+
+# Overlays
+DEVICE_PACKAGE_OVERLAYS += $(COMMON_PATH)/overlay
+PRODUCT_ENFORCE_RRO_TARGETS := *
+PRODUCT_ENFORCE_RRO_EXCLUDED_OVERLAYS += \
+	device/samsung/universal7420-common/overlay/hardware/samsung/AdvancedDisplay
+
+# Tethering is an APEX module, so its overlay must be a runtime one.
+PRODUCT_PACKAGES += \
+	TetheringConfigOverlayUniversal7420
+
+# Additional native libraries
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/public.libraries.txt:$(TARGET_COPY_OUT_VENDOR)/etc/public.libraries.txt
+
+# AdvancedDisplay (MDNIE)
+ifeq ($(NK_HAS_MDNIE),true)
+PRODUCT_PACKAGES += \
+	AdvancedDisplay
+endif
+
+# Audio
+PRODUCT_PACKAGES += \
+	audio.primary.universal7420_32 \
+	audio.r_submix.default \
+	audio.usb.default \
+	tinymix \
+	android.hardware.audio.service \
+	android.hardware.audio@7.1-impl:32 \
+	android.hardware.audio.effect@7.0-impl:32 \
+	android.hardware.bluetooth.audio-impl:32 \
+	audio.bluetooth.default \
+	libeffectproxy
+	
+TARGET_EXCLUDES_AUDIOFX := true
+
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/prebuilt/apps/ViPER4Android.apk:$(TARGET_COPY_OUT_SYSTEM)/priv-app/ViPER4Android/ViPER4Android.apk \
+	$(COMMON_PATH)/prebuilt/soundfx/libv4a_re_64.so:$(TARGET_COPY_OUT_SYSTEM)/lib64/soundfx/libv4a_re.so \
+	$(COMMON_PATH)/prebuilt/soundfx/libv4a_re_32.so:$(TARGET_COPY_OUT_SYSTEM)/lib/soundfx/libv4a_re.so \
+	$(COMMON_PATH)/prebuilt/soundfx/libv4a_re_64.so:$(TARGET_COPY_OUT_VENDOR)/lib64/soundfx/libv4a_re.so \
+	$(COMMON_PATH)/prebuilt/soundfx/libv4a_re_32.so:$(TARGET_COPY_OUT_VENDOR)/lib/soundfx/libv4a_re.so
+
+PRODUCT_COPY_FILES += \
+	frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_volumes.xml \
+	frameworks/av/services/audiopolicy/config/a2dp_in_audio_policy_configuration_7_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/a2dp_in_audio_policy_configuration_7_0.xml \
+	frameworks/av/services/audiopolicy/config/bluetooth_audio_policy_configuration_7_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth_audio_policy_configuration_7_0.xml \
+	frameworks/av/services/audiopolicy/config/default_volume_tables.xml:$(TARGET_COPY_OUT_VENDOR)/etc/default_volume_tables.xml \
+	frameworks/av/services/audiopolicy/config/r_submix_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/r_submix_audio_policy_configuration.xml \
+	frameworks/av/services/audiopolicy/config/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml \
+	$(COMMON_PATH)/configs/audio/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
+	$(COMMON_PATH)/configs/audio/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml \
+	$(COMMON_PATH)/hardware/audio/mixer_paths_zero-wm1840.xml:$(TARGET_COPY_OUT_VENDOR)/etc/mixer_paths_zero-wm1840.xml
+
+# Bluetooth
+PRODUCT_PACKAGES += \
+	android.hardware.bluetooth-service.default
+
+# Boot animation
+TARGET_BOOTANIMATION_HALF_RES := true
+TARGET_SCREEN_HEIGHT := 2560
+TARGET_SCREEN_WIDTH := 1440
+
+# Display resolution picker in Settings -> Display (QHD Default / FHD / HD)
+PRODUCT_PACKAGES += \
+	DisplayResolution
+
+# Mesa panfrost, minigbm and the KMS HWC for the 6.6 kernel
+$(call inherit-product, vendor/nk/gfx/nk_gfx.mk)
+
+# Camera: AIDL V3 V4L2 + SoftISP provider over the mainline 6.6 pipeline
+# (s5c73c2/2p2 rear + s5k4e6 front, ak7375 AF, idg2030 OIS, s2mpb02 flash).
+ifeq ($(NK_HAS_CAMERA),true)
+PRODUCT_PACKAGES += \
+	android.hardware.camera.provider-V3-service.universal7420
+
+PRODUCT_COPY_FILES += \
+	frameworks/native/data/etc/android.hardware.camera.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.xml \
+	frameworks/native/data/etc/android.hardware.camera.flash-autofocus.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.flash-autofocus.xml \
+	frameworks/native/data/etc/android.hardware.camera.front.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.front.xml
+endif
+
+# Charger
+PRODUCT_PACKAGES += \
+	libsuspend
+
+# Kernel DT image. mkbootimg.mk packs $(PRODUCT_OUT)/dt.img into the boot
+# and recovery images with --dt; it is copied from prebuilt/.
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/prebuilt/dt.img:dt.img
+
+# Task profiles: only the overrides of the system task_profiles.json.
+# SurfaceFlinger composes every frame on the GPU, so its main thread and
+# RenderEngine join the foreground cpuset (A53 and A57) instead of
+# system-background (A53 only). The system cgroups.json covers every
+# controller the 6.6 kernel has, so no vendor cgroups.json is shipped.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/configs/task_profiles.json:$(TARGET_COPY_OUT_VENDOR)/etc/task_profiles.json
+
+# DRM
+PRODUCT_PACKAGES += \
+	android.hardware.drm-service.clearkey
+
+# Grows the system filesystem to the SYSTEM partition after an install
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/releasetools/resize-system.sh:install/bin/resize-system.sh
+
+# Fingerprint
+PRODUCT_PACKAGES += \
+	android.hardware.biometrics.fingerprint-service.samsung
+
+# Fingerprint shim
+PRODUCT_PACKAGES += \
+	libbauthtzcommon_shim
+
+# FlipFlap
+PRODUCT_PACKAGES += \
+	FlipFlap
+
+# Gatekeeper
+PRODUCT_PACKAGES += \
+	android.hardware.gatekeeper@1.0-service \
+	android.hardware.gatekeeper@1.0-impl
+
+# GNSS
+ifeq ($(NK_HAS_GPS),true)
+ifneq ($(NK_HAS_SENSORHUB),true)
+$(error NK_HAS_GPS needs NK_HAS_SENSORHUB: lhd runs the BCM4773)
+endif
+PRODUCT_PACKAGES += \
+	android.hardware.gnss-service.universal7420 \
+	init.gps.rc
+
+PRODUCT_COPY_FILES += \
+    $(COMMON_PATH)/configs/gps/gps.conf:$(TARGET_COPY_OUT_SYSTEM)/etc/gps.conf \
+	frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml
+endif
+
+# Graphics: minigbm's AIDL allocator and stable-C mapper 5
+PRODUCT_PACKAGES += \
+	android.hardware.graphics.allocator-service.minigbm \
+	android.hardware.graphics.composer@2.1-service \
+	mapper.minigbm
+
+# Health: the AIDL service also runs charger mode (vendor.charger)
+PRODUCT_PACKAGES += \
+	android.hardware.health-service.samsung \
+	android.hardware.health-service.samsung-recovery
+
+# Hung-task detector: the system init.rc sets hung_task_timeout_secs to 0
+# and llkd.rc restores it only when ro.khungtask.enable is true. With it,
+# a task blocked for 120 s panics the kernel instead of hanging the phone
+# while the watchdog stays fed. Debug builds only: a user build should not
+# reboot on a long but finite I/O stall.
+ifneq ($(TARGET_BUILD_VARIANT),user)
+PRODUCT_SYSTEM_PROPERTIES += \
+	ro.khungtask.enable=true \
+	ro.khungtask.timeout=120
+endif
+
+# HIDL
+PRODUCT_PACKAGES += \
+	android.hidl.base@1.0 \
+	android.hidl.manager@1.0 \
+	libhidltransport \
+	libhwbinder \
+	vndservicemanager
+
+# Keylayouts
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/keylayout/sec_touchkey.kl:$(TARGET_COPY_OUT_SYSTEM)/usr/keylayout/sec_touchkey.kl \
+	$(COMMON_PATH)/configs/keylayout/sec_touchscreen.kl:$(TARGET_COPY_OUT_SYSTEM)/usr/keylayout/sec_touchscreen.kl \
+	$(COMMON_PATH)/configs/keylayout/sec_e-pen.kl:$(TARGET_COPY_OUT_SYSTEM)/usr/keylayout/sec_e-pen.kl \
+	$(COMMON_PATH)/configs/idc/Synaptics_HID_TouchPad.idc:$(TARGET_COPY_OUT_SYSTEM)/usr/idc/Synaptics_HID_TouchPad.idc \
+	$(COMMON_PATH)/configs/idc/ft5x06_ts.idc:$(TARGET_COPY_OUT_SYSTEM)/usr/idc/ft5x06_ts.idc \
+	$(COMMON_PATH)/configs/idc/sec_e-pen.idc:$(TARGET_COPY_OUT_SYSTEM)/usr/idc/sec_e-pen.idc \
+	$(COMMON_PATH)/configs/idc/sec_touchscreen.idc:$(TARGET_COPY_OUT_SYSTEM)/usr/idc/sec_touchscreen.idc
+
+# Keymaster
+PRODUCT_PACKAGES += \
+	android.hardware.keymaster@3.0 \
+	android.hardware.keymaster@3.0-impl \
+	android.hardware.keymaster@3.0-service \
+	libkeymaster3device
+
+# Lights
+PRODUCT_PACKAGES += \
+	android.hardware.light-service.universal7420
+
+# Lineage Health
+PRODUCT_PACKAGES += \
+	vendor.lineage.health-service.default
+
+# Media profile
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/media/media_profiles_V1_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_V1_0.xml
+
+# Network
+PRODUCT_PACKAGES += \
+	netutils-wrapper-1.0
+
+# Neural Networks
+PRODUCT_PACKAGES += \
+	android.hardware.neuralnetworks@1.0 \
+	android.hardware.neuralnetworks@1.1 \
+	libtextclassifier_hash
+
+# NFC
+ifeq ($(NK_HAS_NFC),true)
+PRODUCT_PACKAGES += \
+	libnfc-nci \
+	libnfc_nci_jni \
+	NfcNci \
+	Tag \
+	com.android.nfc_extras \
+	android.hardware.nfc-service.exynos7420
+
+PRODUCT_COPY_FILES += \
+	frameworks/native/data/etc/android.hardware.nfc.hce.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.nfc.hce.xml \
+	frameworks/native/data/etc/android.hardware.nfc.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.nfc.xml \
+	frameworks/native/data/etc/android.hardware.nfc.hcef.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.nfc.hcef.xml \
+	frameworks/native/data/etc/android.hardware.nfc.uicc.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.nfc.uicc.xml \
+	frameworks/native/data/etc/android.hardware.nfc.ese.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.nfc.ese.xml \
+	frameworks/native/data/etc/com.android.nfc_extras.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.android.nfc_extras.xml \
+	frameworks/native/data/etc/com.nxp.mifare.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.nxp.mifare.xml
+endif
+
+# Partitions
+$(call inherit-product, $(SRC_TARGET_DIR)/product/non_ab_device.mk)
+
+# Permissions
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/permissions/com.samsung.permission.HRM_EXT.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.samsung.permission.HRM_EXT.xml \
+	$(COMMON_PATH)/configs/permissions/com.sec.feature.spo2.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.sec.feature.spo2.xml \
+	frameworks/native/data/etc/android.hardware.bluetooth.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth.xml \
+	frameworks/native/data/etc/android.hardware.bluetooth_le.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth_le.xml \
+	frameworks/native/data/etc/android.hardware.fingerprint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.fingerprint.xml \
+	frameworks/native/data/etc/android.hardware.sensor.accelerometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.accelerometer.xml \
+	frameworks/native/data/etc/android.hardware.sensor.barometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.barometer.xml \
+	frameworks/native/data/etc/android.hardware.sensor.compass.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.compass.xml \
+	frameworks/native/data/etc/android.hardware.sensor.gyroscope.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.gyroscope.xml \
+	frameworks/native/data/etc/android.hardware.sensor.light.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.light.xml \
+	frameworks/native/data/etc/android.hardware.sensor.proximity.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.proximity.xml \
+	frameworks/native/data/etc/android.hardware.sensor.stepcounter.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.stepcounter.xml \
+	frameworks/native/data/etc/android.hardware.sensor.stepdetector.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.stepdetector.xml \
+	frameworks/native/data/etc/android.hardware.sensor.heartrate.ecg.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.heartrate.ecg.xml \
+	frameworks/native/data/etc/android.hardware.sensor.heartrate.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.heartrate.xml \
+	frameworks/native/data/etc/android.hardware.sensor.hifi_sensors.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.hifi_sensors.xml \
+	frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
+	frameworks/native/data/etc/android.hardware.usb.accessory.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.accessory.xml \
+	frameworks/native/data/etc/android.hardware.usb.host.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.host.xml \
+	frameworks/native/data/etc/android.hardware.wifi.direct.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.direct.xml \
+	frameworks/native/data/etc/android.hardware.wifi.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.xml \
+	frameworks/native/data/etc/android.software.midi.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.midi.xml \
+	frameworks/native/data/etc/android.software.sip.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.sip.xml \
+	frameworks/native/data/etc/android.software.sip.voip.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.sip.voip.xml \
+	frameworks/native/data/etc/handheld_core_hardware.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/handheld_core_hardware.xml \
+	frameworks/native/data/etc/android.software.freeform_window_management.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.freeform_window_management.xml \
+	frameworks/native/data/etc/android.software.picture_in_picture.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.picture_in_picture.xml
+
+# Power
+PRODUCT_PACKAGES += \
+	android.hardware.power-service.pixel-libperfmgr
+
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/power/powerhint.json:$(TARGET_COPY_OUT_VENDOR)/etc/powerhint.json
+
+# Radio
+ifeq ($(NK_HAS_MODEM),true)
+PRODUCT_PACKAGES += \
+	cbd \
+	init.nk-modem.rc \
+	android.hardware.radio@1.2 \
+	android.hardware.radio@1.3 \
+	android.hardware.radio@1.4 \
+	android.hardware.radio.config@1.0 \
+	android.hardware.radio.config@1.1 \
+	android.hardware.radio.config@1.2 \
+	android.hardware.radio.deprecated@1.0 \
+	libxml2 \
+	libprotobuf-cpp-full 
+
+# Copy stock APN config as lineage one seams to be quite broken and outdated
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/ril/apns-conf.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/apns-conf.xml \
+	$(COMMON_PATH)/configs/ril/spn-conf.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/spn-conf.xml
+
+PRODUCT_COPY_FILES += \
+	frameworks/native/data/etc/android.hardware.telephony.gsm.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.telephony.gsm.xml \
+	frameworks/native/data/etc/android.hardware.telephony.cdma.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.telephony.cdma.xml
+else
+PRODUCT_PACKAGES += \
+	init.nk-nomodem.rc
+endif
+
+# Ramdisk
+PRODUCT_PACKAGES += \
+	init.power.rc \
+	init.samsung.rc \
+	init.recovery.samsungexynos7420.rc \
+	mobicore.rc \
+	init.samsungexynos7420.rc \
+	init.samsungexynos7420.usb.rc \
+	fstab.samsungexynos7420 \
+	fstab.samsungexynos7420_ramdisk \
+	init.baseband.rc \
+	init.touch.sh \
+	init.postboot.sh \
+	set_resolution.sh \
+	ueventd.samsungexynos7420.rc
+
+# Sensor hub
+ifeq ($(NK_HAS_SENSORHUB),true)
+PRODUCT_PACKAGES += \
+	init.sensorhub.rc
+
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/sensor/bcm4773_sensorhub.patch:$(TARGET_COPY_OUT_VENDOR)/etc/sensor/bcm4773_sensorhub.patch \
+	$(COMMON_PATH)/configs/sensor/lhd-nk.conf:$(TARGET_COPY_OUT_VENDOR)/etc/sensor/lhd-nk.conf
+endif
+
+# Sensors: AOSP multihal with IIO + MAX86900 HRM sub-HALs on 6.6
+ifeq ($(NK_HAS_SENSORHUB),true)
+PRODUCT_PACKAGES += \
+	android.hardware.sensors-service.multihal \
+	hals.conf.universal7420 \
+	sensors.universal7420-iio \
+	sensors.max86900
+else
+PRODUCT_PACKAGES += \
+	android.hardware.sensors@1.0-impl.samsung:64 \
+	android.hardware.sensors@1.0-service
+endif
+
+# Sensor shim
+PRODUCT_PACKAGES += \
+	sensor_shim
+
+# Android 17 has no VNDK apex. Install the vendor builds of the system
+# libraries the prebuilt Samsung blobs link against and 64-bit libsecril-client.
+PRODUCT_PACKAGES += \
+	android.hardware.drm@1.0.vendor \
+	android.hardware.drm@1.1.vendor \
+	android.hardware.radio.config@1.0.vendor \
+	android.hardware.radio.config@1.1.vendor \
+	android.hardware.radio.config@1.2.vendor \
+	android.hardware.radio.deprecated@1.0.vendor \
+	android.hidl.base@1.0.vendor \
+	libexpat.vendor \
+	libhidltransport.vendor \
+	libhwbinder.vendor \
+	libnetutils.vendor \
+	libsecril-client \
+	libsqlite.vendor
+
+# Soong namespaces
+PRODUCT_SOONG_NAMESPACES += \
+	$(COMMON_PATH) \
+	hardware/samsung \
+	hardware/google/interfaces \
+	hardware/google/pixel \
+	hardware/google/pixel/power-libperfmgr \
+	hardware/google/pixel/pixelstats \
+	hardware/google/pixel/thermal \
+	hardware/samsung_slsi-linaro/exynos/cpboot
+
+# Stagefright shim
+PRODUCT_PACKAGES += \
+	libstagefright_shim
+
+# Touch
+ifeq ($(NK_HAS_SEC_TOUCH),true)
+PRODUCT_PACKAGES += \
+	vendor.lineage.touch@1.0-service.samsung
+endif
+
+# Thermal: Pixel's AIDL HAL + thermal_symlinks
+PRODUCT_PACKAGES += \
+	android.hardware.thermal-service.pixel \
+	pixelatoms-cpp \
+	thermal_symlinks
+
+PRODUCT_VENDOR_PROPERTIES += \
+	persist.vendor.enable.thermal.genl=true
+
+# 3GB RAM PSI LMKD overrides (overriding RisingOS properties.mk ?= defaults)
+PRODUCT_PRODUCT_PROPERTIES += \
+	ro.lmk.use_psi=true \
+	ro.lmk.use_minfree_levels=false \
+	ro.lmk.low=1001 \
+	ro.lmk.medium=800 \
+	ro.lmk.critical=0 \
+	ro.lmk.critical_upgrade=true \
+	ro.lmk.upgrade_pressure=40 \
+	ro.lmk.downgrade_pressure=60 \
+	ro.lmk.kill_heaviest_task=true \
+	ro.lmk.swap_free_low_percentage=10 \
+	ro.lmk.swap_util_max=90 \
+	ro.lmk.psi_partial_stall_ms=70 \
+	ro.lmk.psi_complete_stall_ms=700
+
+# USB
+PRODUCT_PACKAGES += \
+	android.hardware.usb@1.3-service.basic
+
+# VNDK prebuilts
+PRODUCT_COPY_FILES += \
+	prebuilts/vndk/v32/arm64/arch-arm64-armv8-a/shared/vndk-sp/libutils.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libutils-v32.so \
+	prebuilts/vndk/v32/arm64/arch-arm-armv8-a/shared/vndk-sp/libutils.so:$(TARGET_COPY_OUT_VENDOR)/lib/libutils-v32.so \
+	$(COMMON_PATH)/prebuilt/vendor/lib/libprotobuf-cpp-lite-v29.so:$(TARGET_COPY_OUT_VENDOR)/lib/libprotobuf-cpp-lite-v29.so
+
+# Vibrator
+ifeq ($(NK_HAS_VIBRATOR),true)
+PRODUCT_PACKAGES += \
+	android.hardware.vibrator-service.universal7420
+endif
+
+# Wifi
+PRODUCT_PACKAGES += \
+	hostapd \
+	libwpa_client \
+	wificond \
+	wpa_supplicant \
+	wpa_supplicant.conf \
+	android.hardware.wifi@1.0 \
+	android.hardware.wifi-service
+
+PRODUCT_COPY_FILES += \
+	$(COMMON_PATH)/configs/wifi/cred.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/cred.conf \
+	$(COMMON_PATH)/configs/wifi/p2p_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/p2p_supplicant_overlay.conf \
+	$(COMMON_PATH)/configs/wifi/wpa_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/wpa_supplicant_overlay.conf
+
+$(call inherit-product, vendor/nk/wifi/nk_wifi.mk)
+$(call inherit-product, vendor/nk/bluetooth/nk_bluetooth.mk)
+
+# call the proprietary setup
+$(call inherit-product, vendor/samsung/universal7420-common/universal7420-common-vendor.mk)
+
+# Soong namespaces
+$(call inherit-product, hardware/samsung_slsi-linaro/config/config.mk)
+
+# Bring-up logcat (debug builds only); vendor/nk/modules cancels the
+# test-boot auto-recovery in every build
+$(call inherit-product, vendor/nk/debug/nk_debug.mk)

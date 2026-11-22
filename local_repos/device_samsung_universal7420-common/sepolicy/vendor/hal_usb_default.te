@@ -1,0 +1,3 @@
+# hal_usb_default.te
+allow hal_usb_default hwservicemanager:binder { call transfer };
+allow hal_usb_default default_android_hwservice:hwservice_manager { add find };

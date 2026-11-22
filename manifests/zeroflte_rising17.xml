@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <!-- Explicit GitHub remote to avoid colliding with RisingOS default remote -->
+  <remote name="gh_s6" fetch="https://github.com" />
+
+  <!-- 3.10 kernel tree retained ONLY for device_kernel_headers (32-bit UAPI compat).
+       Actual runtime kernel is Linux 6.6 LTS + SukiSU-Nova in prebuilt/Image. -->
+  <project path="kernel/samsung/universal7420"
+           name="project289/android_kernel_samsung_universal7420"
+           remote="gh_s6"
+           revision="lineage-22.1"
+           clone-depth="1" />
+
+  <!-- Proprietary Samsung blobs + A17 ELF DT_NEEDED fixes (gpsd, lhd, Lifevibes, etc.) -->
+  <project path="vendor/samsung"
+           name="eiarf/proprietary_vendor_samsung"
+           remote="gh_s6"
+           revision="lineage-24.0-KRNL6.18"
+           clone-depth="1" />
+
+  <!-- Exynos 7420 / Samsung hardware dependencies -->
+  <project path="hardware/samsung_slsi-linaro/exynos"
+           name="samsungexynos7420/android_hardware_samsung_slsi-linaro_exynos"
+           remote="gh_s6"
+           revision="lineage-21.0" />
+  <project path="hardware/samsung_slsi-linaro/exynos5"
+           name="samsungexynos7420/android_hardware_samsung_slsi-linaro_exynos5"
+           remote="gh_s6"
+           revision="lineage-21.0" />
+  <project path="hardware/samsung_slsi-linaro/openmax"
+           name="samsungexynos7420/android_hardware_samsung_slsi-linaro_openmax"
+           remote="gh_s6"
+           revision="lineage-21.0" />
+  <project path="hardware/samsung_slsi-linaro/graphics"
+           name="samsungexynos7420/android_hardware_samsung_slsi-linaro_graphics"
+           remote="gh_s6"
+           revision="lineage-21.0" />
+  <project path="hardware/samsung_slsi-linaro/config"
+           name="samsungexynos7420/android_hardware_samsung_slsi-linaro_config"
+           remote="gh_s6"
+           revision="lineage-21.0" />
+  <project path="hardware/samsung_slsi-linaro/codec2"
+           name="samsungexynos7420/android_hardware_samsung_slsi-linaro_codec2"
+           remote="gh_s6"
+           revision="lineage-21" />
+  <project path="hardware/samsung_slsi-linaro/interfaces"
+           name="LineageOS/android_hardware_samsung_slsi-linaro_interfaces"
+           remote="gh_s6"
+           revision="lineage-24.0" />
+  <project path="hardware/samsung"
+           name="LineageOS/android_hardware_samsung"
+           remote="gh_s6"
+           revision="lineage-24.0" />
+  <project path="device/samsung_slsi/sepolicy"
+           name="LineageOS/android_device_samsung_slsi_sepolicy"
+           remote="gh_s6"
+           revision="lineage-24.0" />
+</manifest>

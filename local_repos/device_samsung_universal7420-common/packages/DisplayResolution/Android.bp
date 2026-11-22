@@ -1,0 +1,42 @@
+//
+// Copyright (C) 2026 The LineageOS Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+android_app {
+    name: "DisplayResolution",
+
+    srcs: ["src/**/*.java"],
+    resource_dirs: ["res"],
+    certificate: "platform",
+    platform_apis: true,
+    system_ext_specific: true,
+    privileged: true,
+
+    static_libs: [
+        "androidx.appcompat_appcompat",
+        "androidx.coordinatorlayout_coordinatorlayout",
+        "androidx.core_core",
+        "com.google.android.material_material",
+    ],
+
+    required: [
+        "preinstalled-packages-platform-displayresolution.xml",
+        "privapp-permissions-displayresolution.xml",
+    ],
+}
+
+prebuilt_etc {
+    name: "preinstalled-packages-platform-displayresolution.xml",
+    src: "preinstalled-packages-platform-displayresolution.xml",
+    sub_dir: "sysconfig",
+    system_ext_specific: true,
+}
+
+prebuilt_etc {
+    name: "privapp-permissions-displayresolution.xml",
+    src: "privapp-permissions-displayresolution.xml",
+    sub_dir: "permissions",
+    system_ext_specific: true,
+}

@@ -1,0 +1,7 @@
+# hal_thermal_default.te
+
+allow hal_thermal_default sysfs_thermal:file r_file_perms;
+
+# Pixel thermal HAL: the kernel's thermal netlink event group
+# (persist.vendor.enable.thermal.genl).
+allow hal_thermal_default self:netlink_generic_socket create_socket_perms_no_ioctl;

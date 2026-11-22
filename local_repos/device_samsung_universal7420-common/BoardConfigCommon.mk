@@ -1,0 +1,220 @@
+#
+# Copyright (C) 2020 The LineageOS Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+COMMON_PATH := device/samsung/universal7420-common
+
+include $(COMMON_PATH)/nk_features.mk
+
+BUILD_BROKEN_DUP_RULES := true
+
+# Include path
+TARGET_SPECIFIC_HEADER_PATH := $(COMMON_PATH)/include
+
+# Architecture
+TARGET_ARCH := arm64
+TARGET_ARCH_VARIANT := armv8-a
+TARGET_CPU_ABI := arm64-v8a
+TARGET_CPU_ABI2 :=
+TARGET_CPU_VARIANT := generic
+TARGET_CPU_VARIANT_RUNTIME := cortex-a57
+
+TARGET_2ND_ARCH := arm
+TARGET_2ND_ARCH_VARIANT := armv8-a
+TARGET_2ND_CPU_ABI := armeabi-v7a
+TARGET_2ND_CPU_ABI2 := armeabi
+TARGET_2ND_CPU_VARIANT := generic
+TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
+TARGET_NR_CPUS := 8
+
+# Audio
+TARGET_AUDIOHAL_VARIANT := samsung_7420
+AUDIOSERVER_MULTILIB := 32
+
+# Bluetooth: the NK 6.6 kernel runs the BCM4358 through hci_bcm, so the
+# AOSP AIDL HAL, which takes hci0 over an HCI user channel, replaces
+# the libbt-vendor UART stack.
+BOARD_HAVE_BLUETOOTH := true
+
+# Bootloader
+# Android 15 defaults AB_OTA_UPDATER to true; this device is non-A/B.
+AB_OTA_UPDATER := false
+
+TARGET_NO_BOOTLOADER := true
+TARGET_NO_RADIOIMAGE := true
+
+# Compatibility Matrix
+DEVICE_MATRIX_FILE += $(COMMON_PATH)/compatibility_matrix.xml
+DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += \
+    $(COMMON_PATH)/framework_compatibility_matrix.xml \
+    hardware/samsung/vintf/samsung_framework_compatibility_matrix.xml
+
+# Dexpreopt
+ifeq ($(HOST_OS),linux)
+  ifneq ($(TARGET_BUILD_VARIANT),eng)
+    WITH_DEXPREOPT_BOOT_IMG_AND_SYSTEM_SERVER_ONLY ?= false
+    WITH_DEXPREOPT := true
+  endif
+endif
+
+## ELF
+BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true
+
+# Display
+TARGET_SCREEN_DENSITY := 560
+
+# Filesystem
+# Android 17 keeps aconfig flag storage in /metadata, and system_server
+# aborts on the first flag it can't read. The CACHE partition is the
+# metadata partition, mounted in first stage; there is no cache image,
+# so /cache is the /data/cache link.
+BOARD_USES_METADATA_PARTITION := true
+BOARD_HAS_LARGE_FILESYSTEM := true
+TARGET_USERIMAGES_USE_EXT4 := true
+TARGET_USERIMAGES_USE_F2FS := true
+
+# HIDL
+PRODUCT_ENFORCE_VINTF_MANIFEST_OVERRIDE := true
+
+# Kernel
+# The 6.6 kernel is built outside the ROM (SM_G92X ./build_kernel_linux.sh);
+# prebuilt/ holds its Image and the DTBH v2 dt.img S-Boot reads from
+# the boot image's dt slot.
+TARGET_KERNEL_ARCH := arm64
+TARGET_KERNEL_HEADER_ARCH := arm64
+BOARD_KERNEL_BASE := 0x10000000
+# BOARD_KERNEL_CMDLINE := commandline from boot.img by bootloader
+BOARD_KERNEL_PAGESIZE := 2048
+BOARD_MKBOOTIMG_ARGS := --kernel_offset 0x00008000 --ramdisk_offset 0x01000000 --tags_offset 0x00000100
+TARGET_PREBUILT_KERNEL := $(COMMON_PATH)/prebuilt/Image
+# The Image's modules, from the same build. The build installs them in
+# /vendor/lib/modules and runs depmod there; vendor/nk's init scripts
+# modprobe zram, audio and Bluetooth from it. Wi-Fi is built in.
+BOARD_VENDOR_KERNEL_MODULES := $(wildcard $(COMMON_PATH)/prebuilt/modules/*.ko)
+TARGET_LINUX_KERNEL_VERSION := 6.6
+# Kernel source for Lineage's headers_install only (device_kernel_headers);
+# the kernel itself is the prebuilt above. See prebuilt/README. This is the
+# 3.10 tree: Lineage installs one arm64 header set for both ABIs, and only
+# its sigcontext.h avoids __uint128_t, which 32-bit clang lacks.
+TARGET_KERNEL_SOURCE := kernel/samsung/universal7420
+# With the source present, kernel.mk builds it unless forced to the prebuilt.
+TARGET_FORCE_PREBUILT_KERNEL := true
+BOARD_KERNEL_IMAGE_NAME := Image
+BOARD_CUSTOM_BOOTIMG := true
+BOARD_CUSTOM_BOOTIMG_MK := $(COMMON_PATH)/mkbootimg.mk
+BOARD_RAMDISK_USE_XZ := true
+BOARD_USES_FULL_RECOVERY_IMAGE := false
+
+## Lineage Health
+TARGET_HEALTH_CHARGING_CONTROL_CHARGING_PATH := /sys/class/power_supply/battery/charging_enabled
+TARGET_HEALTH_CHARGING_CONTROL_CHARGING_ENABLED := 1
+TARGET_HEALTH_CHARGING_CONTROL_CHARGING_DISABLED := 0
+TARGET_HEALTH_CHARGING_CONTROL_SUPPORTS_BYPASS := true
+TARGET_HEALTH_CHARGING_CONTROL_SUPPORTS_TOGGLE := true
+TARGET_HEALTH_CHARGING_CONTROL_SUPPORTS_DEADLINE := false
+
+# Manifest
+DEVICE_MANIFEST_FILE += $(COMMON_PATH)/manifest.xml
+ifeq ($(NK_HAS_CAMERA),true)
+DEVICE_MANIFEST_FILE += $(COMMON_PATH)/manifest_camera.xml
+endif
+ifeq ($(NK_HAS_MODEM),true)
+DEVICE_MANIFEST_FILE += $(COMMON_PATH)/manifest_radio.xml
+endif
+ifeq ($(NK_HAS_SEC_TOUCH),true)
+DEVICE_MANIFEST_FILE += $(COMMON_PATH)/manifest_touch.xml
+endif
+# AIDL GNSS, NFC, and IR declare their HALs via vintf_fragments in Android.bp.
+# The multihal declares the AIDL sensors HAL in its own VINTF fragment.
+ifneq ($(NK_HAS_SENSORHUB),true)
+DEVICE_MANIFEST_FILE += $(COMMON_PATH)/manifest_sensors_hidl.xml
+endif
+
+# Partitions
+BOARD_FLASH_BLOCK_SIZE := 131072
+BOARD_BOOTIMAGE_PARTITION_SIZE := 29360128
+# The non-A/B OTA tool sizes its block stash from the CACHE partition.
+# CACHE is /metadata, so no cache image is built; the build/make patch
+# passes cache_size on from this size alone.
+BOARD_CACHEIMAGE_PARTITION_SIZE := 209715200
+BOARD_RECOVERYIMAGE_PARTITION_SIZE := 35651584
+BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3124019200
+BOARD_ROOT_EXTRA_FOLDERS += efs cpefs
+TARGET_FS_CONFIG_GEN := $(COMMON_PATH)/config.fs
+
+# Platform
+BOARD_VENDOR := samsung
+TARGET_BOARD_PLATFORM := exynos5
+TARGET_SOC := exynos7420
+TARGET_BOOTLOADER_BOARD_NAME := universal7420
+include hardware/samsung_slsi-linaro/config/BoardConfig7420.mk
+
+# Radio
+BOARD_MODEM_TYPE := ss333
+ENABLE_VENDOR_RIL_SERVICE := true
+TARGET_USES_VND_SECRIL := true
+
+# Recovery
+ifneq ($(filter noblelte nobleltecan nobleltedd nobleltedv nobleltejv nobleltektt nobleltelgt noblelteskt nobleltespr nobleltetmo nobleltextc nobleltezt zenlte zenltecan zenltedd zenltedv zenltejv zenltektt zenltelgt zenlteskt zenltetmo zenltexx zenltezt,$(TARGET_DEVICE)),)
+TARGET_RECOVERY_FSTAB := $(COMMON_PATH)/ramdisk/etc/fstab.samsungexynos7420.noble
+else
+TARGET_RECOVERY_FSTAB := $(COMMON_PATH)/ramdisk/etc/fstab.samsungexynos7420.zero
+endif
+TARGET_RECOVERY_DEVICE_DIRS += $(COMMON_PATH)
+
+# Releasetools
+TARGET_RELEASETOOLS_EXTENSIONS := $(COMMON_PATH)/releasetools
+
+# SEPolicy
+include device/lineage/sepolicy/exynos/sepolicy.mk
+BOARD_SEPOLICY_TEE_FLAVOR := mobicore
+include device/samsung_slsi/sepolicy/sepolicy.mk
+BOARD_VENDOR_SEPOLICY_DIRS += $(COMMON_PATH)/sepolicy/vendor
+SELINUX_IGNORE_NEVERALLOWS := true
+
+# Shims
+TARGET_LD_SHIM_LIBS += \
+	/vendor/lib/libbauthserver.so|/vendor/lib/libbauthtzcommon_shim.so \
+	/vendor/lib64/libbauthserver.so|/vendor/lib64/libbauthtzcommon_shim.so \
+	/vendor/bin/hw/gpsd|sensor_shim.so \
+	/vendor/bin/hw/lhd|sensor_shim.so
+
+# System prop
+BOARD_PROPERTY_OVERRIDES_SPLIT_ENABLED := true
+TARGET_SYSTEM_PROP += $(COMMON_PATH)/system.prop
+TARGET_VENDOR_PROP += $(COMMON_PATH)/vendor.prop
+
+# Vendor security patch level
+VENDOR_SECURITY_PATCH := 2018-06-01
+
+# Vendor separation
+TARGET_COPY_OUT_VENDOR := system/vendor
+
+# Wifi: mainline brcmfmac over plain nl80211. The Broadcom vendor HAL
+# stays; supplicant and hostapd use the stub driver-command library.
+BOARD_WLAN_DEVICE                := bcmdhd
+WPA_SUPPLICANT_USE_HIDL          := true
+WPA_SUPPLICANT_VERSION           := VER_0_8_X
+BOARD_WPA_SUPPLICANT_DRIVER      := NL80211
+BOARD_HOSTAPD_DRIVER             := NL80211
+WIFI_BAND                        := 802_11_ABG
+WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY := true
+
+
+# Inherit from the proprietary version
+include vendor/samsung/universal7420-common/BoardConfigVendor.mk
+
+# Support Gralloc 2.1 on Android 17
+TARGET_USES_LEGACY_GRALLOC := true

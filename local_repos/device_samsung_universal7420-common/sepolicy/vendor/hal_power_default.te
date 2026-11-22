@@ -1,0 +1,49 @@
+# hal_power_default.te
+
+allow hal_power_default{
+    sysfs_backlight_writable
+    sysfs_batteryinfo
+    sysfs_devices_system_cpu
+    sysfs_graphics
+    sysfs_light
+    sysfs_power_writable
+}:dir r_dir_perms;
+
+allow hal_power_default{
+    pm_qos_device
+    sysfs_backlight_writable
+    sysfs_batteryinfo
+    sysfs_devices_system_cpu
+    sysfs_graphics
+    sysfs_light
+}:file rw_file_perms;
+
+# GPU devfreq floor (/sys/class/devfreq/14ac0000.gpu/min_freq).
+allow hal_power_default sysfs_devfreq:dir r_dir_perms;
+allow hal_power_default sysfs_devfreq:file rw_file_perms;
+
+# Top-app utilisation clamp (/dev/cpuctl/top-app/cpu.uclamp.min).
+# Android 13 does not enable the cgroup_seclabel policy capability, so
+# cgroup v1 files cannot get their own genfscon type and the rule stays
+# on cgroup. libperfmgr only opens, writes and (for dumpsys) reads it.
+allow hal_power_default cgroup:dir search;
+allow hal_power_default cgroup:file { getattr open read write };
+
+# Touch input inhibit (vendor.touch.inhibit).
+set_prop(hal_power_default, vendor_touch_prop)
+
+# Hint state properties (vendor.powerhal.state, .audio, .rendering).
+set_prop(hal_power_default, vendor_powerhal_prop)
+
+# ADPF hint sessions set uclamp.min on the session threads with
+# sched_setattr(): HWUI render threads of apps, SurfaceFlinger,
+# system_server and the composer. App threads carry MLS categories, and
+# the MLS constraints on getsched/setsched only pass for a trusted
+# subject, as on Pixel.
+typeattribute hal_power_default mlstrustedsubject;
+allow hal_power_default self:capability sys_nice;
+allow hal_power_default appdomain:process { getsched setsched };
+allow hal_power_default { surfaceflinger system_server hal_graphics_composer_default }:process setsched;
+
+# libperfmgr reads the thermal state from the thermal HAL on Android 17.
+hal_client_domain(hal_power_default, hal_thermal)

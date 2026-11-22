@@ -1,0 +1,9 @@
+# domain.te
+
+allow domain {
+    debugfs_ion
+    debugfs_mali
+    debugfs_mali_mem
+}:dir r_dir_perms;
+
+dontaudit domain mediaserver_exec:file { getattr read };

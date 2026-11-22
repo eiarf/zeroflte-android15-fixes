@@ -1,0 +1,27 @@
+diff --git a/graphics/composer/2.1/default/android.hardware.graphics.composer@2.1-service.rc b/graphics/composer/2.1/default/android.hardware.graphics.composer@2.1-service.rc
+index c8fccdc..23f6e33 100644
+--- a/graphics/composer/2.1/default/android.hardware.graphics.composer@2.1-service.rc
++++ b/graphics/composer/2.1/default/android.hardware.graphics.composer@2.1-service.rc
+@@ -3,6 +3,6 @@ service vendor.hwcomposer-2-1 /vendor/bin/hw/android.hardware.graphics.composer@
+     class hal animation
+     user system
+     group graphics drmrpc
+-    capabilities SYS_NICE
++    capabilities SYS_NICE SYS_ADMIN
+     onrestart restart surfaceflinger
+     task_profiles ServiceCapacityLow
+diff --git a/graphics/composer/2.1/default/service.cpp b/graphics/composer/2.1/default/service.cpp
+index 1276d2d..6f595a0 100644
+--- a/graphics/composer/2.1/default/service.cpp
++++ b/graphics/composer/2.1/default/service.cpp
+@@ -28,8 +28,8 @@ using android::hardware::graphics::composer::V2_1::IComposer;
+ using android::hardware::graphics::composer::V2_1::passthrough::HwcLoader;
+ 
+ int main() {
+-    // the conventional HAL might start binder services
+-    android::ProcessState::initWithDriver("/dev/vndbinder");
++    // Stay on /dev/binder: libui finds the AIDL allocator, and with it
++    // mapper 5, only through servicemanager.
+     android::ProcessState::self()->setThreadPoolMaxThreadCount(4);
+     android::ProcessState::self()->startThreadPool();
+ 

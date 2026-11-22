@@ -1,0 +1,47 @@
+From: zeroflte-rising17 <eiarf@users.noreply.github.com>
+Subject: [PATCH] drm/exynos: defer probe while enabled DT component has not bound
+
+exynos_drm_init() runs at device_initcall before devfreq/memory drivers
+(exynos-bus, exynos7420-dmc). With fw_devlink enabled and decon declaring
+interconnects = <&bus_disp &dmc>, decon_probe() is deferred until bus_disp
+and dmc register, causing exynos_drm_match_add() to return -ENODEV instead
+of -EPROBE_DEFER and leaving exynos-drm permanently unbound while simpledrm
+stays on card0.
+---
+diff --git a/drivers/gpu/drm/exynos/exynos_drm_drv.c b/drivers/gpu/drm/exynos/exynos_drm_drv.c
+index ef15061c4..1c450bd0c 100644
+--- a/drivers/gpu/drm/exynos/exynos_drm_drv.c
++++ b/drivers/gpu/drm/exynos/exynos_drm_drv.c
+@@ -253,7 +253,31 @@ static struct component_match *exynos_drm_match_add(struct device *dev)
+ 		put_device(p);
+ 	}
+ 
+-	return match ?: ERR_PTR(-ENODEV);
++	if (match)
++		return match;
++
++	/*
++	 * If an enabled DT component (such as DECON, which waits on fw_devlink
++	 * suppliers like exynos-bus/dmc) has not probed yet, defer instead of
++	 * failing permanently with -ENODEV.
++	 */
++	for (i = 0; i < ARRAY_SIZE(exynos_drm_drivers); ++i) {
++		struct exynos_drm_driver_info *info = &exynos_drm_drivers[i];
++		struct device_node *np;
++
++		if (!info->driver || !(info->flags & DRM_COMPONENT_DRIVER) ||
++		    !info->driver->driver.of_match_table)
++			continue;
++
++		for_each_matching_node(np, info->driver->driver.of_match_table) {
++			if (of_device_is_available(np)) {
++				of_node_put(np);
++				return ERR_PTR(-EPROBE_DEFER);
++			}
++		}
++	}
++
++	return ERR_PTR(-ENODEV);
+ }
+ 
+ static int exynos_drm_bind(struct device *dev)

@@ -1,0 +1,173 @@
+diff --git a/core/java/com/android/internal/util/android/FontController.java b/core/java/com/android/internal/util/android/FontController.java
+index 641176b59..c430d9892 100644
+--- a/core/java/com/android/internal/util/android/FontController.java
++++ b/core/java/com/android/internal/util/android/FontController.java
+@@ -299,14 +299,14 @@ public class FontController {
+         // First try to resolve the currently active custom font directly
+         String currentFont = getCurrentFont();
+         Typeface installed = Typeface.getSystemTypeface(currentFont);
+-        if (installed != null) {
++        if (installed != null && installed != Typeface.DEFAULT && installed != Typeface.SANS_SERIF) {
+             logger("resolveDefaultTypeface: resolved current font '" + currentFont + "'");
+             return installed;
+         }
+         // Family-list ids such as google-sans-flex are not always map keys.
+         for (String family : DEFAULT_FONT_FALLBACKS) {
+             Typeface tf = Typeface.getSystemTypeface(family);
+-            if (tf != null) {
++            if (tf != null && tf != Typeface.DEFAULT && tf != Typeface.SANS_SERIF) {
+                 logger("resolveDefaultTypeface: resolved via fallback '" + family + "'");
+                 return tf;
+             }
+diff --git a/graphics/java/android/graphics/Typeface.java b/graphics/java/android/graphics/Typeface.java
+index fd22add60..738f4b160 100644
+--- a/graphics/java/android/graphics/Typeface.java
++++ b/graphics/java/android/graphics/Typeface.java
+@@ -231,9 +231,28 @@ public class Typeface {
+         if (mPendingTypeface != null) {
+             Typeface pendingTypeface = mPendingTypeface.get();
+             if (pendingTypeface == null) {
++                if (native_instance != 0) {
++                    return native_instance;
++                }
+                 throw new IllegalStateException("The Typeface is not fully initialized.");
+             }
+-            return pendingTypeface.getNativeInstance();
++            if (pendingTypeface == this) {
++                return native_instance;
++            }
++            Typeface current = pendingTypeface;
++            int depth = 0;
++            while (current != null && current.mPendingTypeface != null && depth < 16) {
++                Typeface next = current.mPendingTypeface.get();
++                if (next == null || next == current || next == this) {
++                    break;
++                }
++                current = next;
++                depth++;
++            }
++            if (current != null && current.native_instance != 0) {
++                return current.native_instance;
++            }
++            return native_instance;
+         } else {
+             return native_instance;
+         }
+@@ -263,6 +282,12 @@ public class Typeface {
+             throw new IllegalStateException(
+                     "Do not call this method other than placeholder Typeface.");
+         }
++        final Typeface concrete = resolveConcrete(initializedTypeface);
++        if (concrete != null && concrete != this) {
++            initializedTypeface = concrete;
++        } else if (initializedTypeface == this) {
++            return;
++        }
+         if (!mPendingTypeface.compareAndSet(null, initializedTypeface)) {
+             Log.w(TAG, "The initialized pending Typeface (" + mSystemFontFamilyName
+                     + ") is replaced with another Typeface.");
+@@ -280,7 +305,11 @@ public class Typeface {
+                     + " is not a placeholder Typeface, cannot repoint in place.");
+             return false;
+         }
+-        mPendingTypeface.set(resolvedTypeface);
++        final Typeface concrete = resolveConcrete(resolvedTypeface);
++        if (concrete == null || concrete == this) {
++            return false;
++        }
++        mPendingTypeface.set(concrete);
+         return true;
+     }
+ 
+diff --git a/graphics/java/android/graphics/fonts/SystemFonts.java b/graphics/java/android/graphics/fonts/SystemFonts.java
+index 0190dc746..4c7f9e974 100644
+--- a/graphics/java/android/graphics/fonts/SystemFonts.java
++++ b/graphics/java/android/graphics/fonts/SystemFonts.java
+@@ -204,9 +204,12 @@ public final class SystemFonts {
+         return FontFamily.Builder.VARIABLE_FONT_FAMILY_TYPE_NONE;
+     }
+ 
+-    private static void pushFamilyToFallback(@NonNull FontConfig.FontFamily xmlFamily,
++    private static void pushFamilyToFallback(FontConfig.FontFamily xmlFamily,
+             @NonNull ArrayMap<String, NativeFamilyListSet> fallbackMap,
+             @NonNull Map<String, ByteBuffer> cache) {
++        if (xmlFamily == null || xmlFamily.getLocaleList() == null) {
++            return;
++        }
+         final String languageTags = xmlFamily.getLocaleList().toLanguageTags();
+         final int variant = xmlFamily.getVariant();
+ 
+@@ -498,7 +501,7 @@ public final class SystemFonts {
+                     continue;  // The customization is already applied.
+                 }
+                 FontConfig.Customization.LocaleFallback localeFallback = localeFallbacks.get(j);
+-                if (scriptMatch(xmlFamily.getLocaleList(), localeFallback.getScript())) {
++                if (xmlFamily != null && xmlFamily.getLocaleList() != null && scriptMatch(xmlFamily.getLocaleList(), localeFallback.getScript())) {
+                     customizations.add(localeFallback);
+                     seenCustomization.put(j, 1);
+                 }
+diff --git a/services/core/java/com/android/server/graphics/fonts/FontManagerService.java b/services/core/java/com/android/server/graphics/fonts/FontManagerService.java
+index ef3aec574..ab270e6d2 100644
+--- a/services/core/java/com/android/server/graphics/fonts/FontManagerService.java
++++ b/services/core/java/com/android/server/graphics/fonts/FontManagerService.java
+@@ -347,8 +347,12 @@ public final class FontManagerService extends IFontManager.Stub {
+                             ? SystemService.PHASE_LOCK_SETTINGS_READY
+                             : SystemService.PHASE_ACTIVITY_MANAGER_READY;
+             if (phase == latestFontLoadBootPhase) {
+-                // Wait for FontManagerService to start since it will be needed after this point.
+-                mServiceStarted.join();
++                // Wait for FontManagerService to start with timeout to avoid watchdog kill
++                try {
++                    mServiceStarted.get(5, java.util.concurrent.TimeUnit.SECONDS);
++                } catch (Throwable t) {
++                    Slog.w(TAG, "Timeout waiting for FontManagerService to start", t);
++                }
+             }
+         }
+     }
+@@ -442,23 +446,33 @@ public final class FontManagerService extends IFontManager.Stub {
+         if (Flags.useOptimizedBoottimeFontLoading()) {
+             Slog.i(TAG, "Using optimized boot-time font loading.");
+             SystemServerInitThreadPool.submit(() -> {
+-                initialize();
+-
+-                // Set system font map only if there is updatable font directory.
+-                // If there is no updatable font directory, `initialize` will have already loaded
+-                // the system font map, so there's no need to set the system font map again here.
+-                synchronized (mUpdatableFontDirLock) {
+-                    if  (mUpdatableFontDir != null) {
+-                        setSystemFontMap();
++                try {
++                    initialize();
++
++                    // Set system font map only if there is updatable font directory.
++                    // If there is no updatable font directory, `initialize` will have already loaded
++                    // the system font map, so there's no need to set the system font map again here.
++                    synchronized (mUpdatableFontDirLock) {
++                        if  (mUpdatableFontDir != null) {
++                            setSystemFontMap();
++                        }
+                     }
++                } catch (Throwable t) {
++                    Slog.e(TAG, "Error initializing font map", t);
++                } finally {
++                    serviceStarted.complete(null);
+                 }
+-                serviceStarted.complete(null);
+             }, "FontManagerService_create");
+         } else {
+             Slog.i(TAG, "Not using optimized boot-time font loading.");
+-            initialize();
+-            setSystemFontMap();
+-            serviceStarted.complete(null);
++            try {
++                initialize();
++                setSystemFontMap();
++            } catch (Throwable t) {
++                Slog.e(TAG, "Error initializing font map", t);
++            } finally {
++                serviceStarted.complete(null);
++            }
+         }
+     }
+ 

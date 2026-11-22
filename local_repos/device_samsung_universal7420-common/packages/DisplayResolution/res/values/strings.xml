@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_resolution_title">Screen resolution</string>
+    <string name="resolution_summary_fallback">Native QHD (Default)</string>
+    <string name="resolution_intro">Choose the rendering resolution for your display. Lowering the resolution reduces GPU workload and power consumption while keeping UI layout proportional.</string>
+    <string name="current_resolution_value">Active: %1$s</string>
+
+    <string name="mode_qhd_title">QHD+ Native (Default)</string>
+    <string name="mode_qhd_desc">Full panel sharpness at native hardware resolution and system density.</string>
+
+    <string name="mode_fhd_title">FHD (Balanced)</string>
+    <string name="mode_fhd_desc">Cuts GPU pixel load by ~44% for smoother 60 FPS animations and longer battery life.</string>
+
+    <string name="mode_hd_title">HD (Power saver)</string>
+    <string name="mode_hd_desc">Maximum GPU headroom and battery savings, ideal for lightweight tasks or gaming.</string>
+
+    <string name="resolution_footer_note">Changes apply immediately and persist across reboots without restarting the phone.</string>
+    <string name="resolution_apply_failed">Failed to apply display resolution</string>
+
+    <string name="summary_mode_qhd">QHD (%1$d × %2$d · Default)</string>
+    <string name="summary_mode_fhd">FHD (%1$d × %2$d)</string>
+    <string name="summary_mode_hd">HD (%1$d × %2$d)</string>
+</resources>

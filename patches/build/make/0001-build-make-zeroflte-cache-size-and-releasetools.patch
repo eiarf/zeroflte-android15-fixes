@@ -1,0 +1,62 @@
+diff --git a/core/Makefile b/core/Makefile
+index 2827850..74274ab 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -6268,6 +6268,13 @@ ifneq (,$(strip $(BOARD_AVB_VBMETA_CUSTOM_PARTITIONS)))
+ endif # BOARD_AVB_VBMETA_CUSTOM_PARTITIONS
+ endif # BOARD_AVB_ENABLE
+ 	$(call generate-userimage-prop-dictionary, $@)
++ifndef BUILDING_CACHE_IMAGE
++ifdef BOARD_CACHEIMAGE_PARTITION_SIZE
++	@# A non-A/B device can keep its CACHE partition for another use and
++	@# build no cache image; the OTA tools still size the stash from it.
++	$(hide) echo "cache_size=$(BOARD_CACHEIMAGE_PARTITION_SIZE)" >> $@
++endif
++endif
+ ifeq ($(AB_OTA_UPDATER),true)
+ 	@# Include the build type in META/misc_info.txt so the server can easily differentiate production builds.
+ 	$(hide) echo "build_type=$(TARGET_BUILD_VARIANT)" >> $@
+diff --git a/tools/releasetools/common.py b/tools/releasetools/common.py
+index 89a7abb..4b9f008 100644
+--- a/tools/releasetools/common.py
++++ b/tools/releasetools/common.py
+@@ -581,6 +581,9 @@ class BuildInfo(object):
+     if prop_val is not None:
+       return prop_val
+ 
++    if prop == "ro.build.product":
++      return self._ResolveRoProductBuildProp("ro.product.device")
++
+     raise ExternalError("couldn't find %s in build.prop" % (prop,))
+ 
+   def _ResolveRoProductBuildProp(self, prop):
+diff --git a/tools/releasetools/make_recovery_patch.py b/tools/releasetools/make_recovery_patch.py
+index b52289b..696f416 100644
+--- a/tools/releasetools/make_recovery_patch.py
++++ b/tools/releasetools/make_recovery_patch.py
+@@ -61,9 +61,9 @@ def main(argv):
+   def output_sink(fn, data):
+     if target_files_dir is None:
+       return
+-
+-    with open(os.path.join(output_dir, target_files_dir,
+-                           *fn.split("/")), "wb") as f:
++    dest = os.path.join(output_dir, target_files_dir, *fn.split("/"))
++    os.makedirs(os.path.dirname(dest), exist_ok=True)
++    with open(dest, "wb") as f:
+       f.write(data)
+ 
+   common.MakeRecoveryPatch(input_dir, output_sink, recovery_img, boot_img)
+diff --git a/tools/releasetools/non_ab_ota.py b/tools/releasetools/non_ab_ota.py
+index 12f64c2..8ba637c 100644
+--- a/tools/releasetools/non_ab_ota.py
++++ b/tools/releasetools/non_ab_ota.py
+@@ -232,7 +232,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
+   androidver = target_info.GetBuildProp("ro.build.version.release")
+   buildday = target_info.GetBuildProp("ro.build.date")
+   securep = target_info.GetBuildProp("ro.build.version.security_patch")
+-  device = target_info.GetBuildProp("ro.build.product")
++  device = target_info.GetBuildProp("ro.product.device")
+   manufacturer = target_info.GetBuildProp("ro.product.manufacturer")
+   script.Print("===============================================");
+   script.Print(" Android version  : %s"%(androidver));

@@ -1,0 +1,20 @@
+################
+# DEVICES 
+################
+
+# By name: the UFS LUNs can enumerate in another order (BOOT has shown up
+# on sdb), so sdaN numbers do not always name the same partition.
+# /dev/block/NAD_REFER         u:object_r:NAD_REFER_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/BOTA0         u:object_r:bota_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/BOTA1         u:object_r:bota_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/PARAM         u:object_r:param_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/OTA           u:object_r:misc_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/RADIO         u:object_r:radio_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/TOMBSTONES    u:object_r:tombstones_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/DNT           u:object_r:dnt_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/STEADY        u:object_r:steady_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/PERSDATA      u:object_r:persdata_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/SYSTEM        u:object_r:system_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/CACHE         u:object_r:metadata_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/HIDDEN        u:object_r:hidden_block_device:s0
+/dev/block/platform/15570000\.ufs/by-name/USERDATA      u:object_r:userdata_block_device:s0

@@ -1,0 +1,55 @@
+diff --git a/arch/arm64/configs/zeroflte_gki.fragment b/arch/arm64/configs/zeroflte_gki.fragment
+index e62de2381..2e4cc6a1b 100644
+--- a/arch/arm64/configs/zeroflte_gki.fragment
++++ b/arch/arm64/configs/zeroflte_gki.fragment
+@@ -169,7 +169,7 @@ CONFIG_LTO_NONE=y
+ # unless userspace cancels it once the boot completes. The hardware
+ # watchdog runs from its probe (s3c2410_wdt.tmr_atboot). firmware_class.path
+ # lets drivers such as brcmfmac load firmware straight from /vendor/firmware.
+-CONFIG_CMDLINE="stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off bootconfig clk_ignore_unused pd_ignore_unused deferred_probe_timeout=0 rodata=on loglevel=8 printk.devkmsg=on ignore_loglevel log_buf_len=4M dsh_autorecovery=150 s3c2410_wdt.tmr_atboot=1 firmware_class.path=/vendor/firmware"
++CONFIG_CMDLINE="slub_debug=FZPU,kmalloc-16 cgroup_disable=pressure kasan.stacktrace=off bootconfig clk_ignore_unused pd_ignore_unused deferred_probe_timeout=0 fw_devlink=permissive rodata=on loglevel=8 printk.devkmsg=on ignore_loglevel log_buf_len=4M dsh_autorecovery=150 s3c2410_wdt.tmr_atboot=1 firmware_class.path=/vendor/firmware"
+ 
+ # Size: the Image must fit the 28 MiB BOOT partition with the ROM ramdisk.
+ # The A57/A53 have no pointer authentication, so the PAC-to-SCS patching
+@@ -273,6 +273,10 @@ CONFIG_SND_SOC_SAMSUNG_ZERO_WM1840=m
+ # Root: KernelSU, built in, hooked through kprobes, the syscall
+ # tracepoint and its sys_call_table dispatcher (GKI mode).
+ CONFIG_KSU=y
++CONFIG_KSU_MANUAL_SU=y
++# CONFIG_KPM is not set
++# CONFIG_KSU_DISABLE_MANAGER is not set
++# CONFIG_KSU_DISABLE_POLICY is not set
+ # KernelSU finds sys_call_table, security_hook_heads and other data
+ # symbols through kallsyms, as on GKI.
+ CONFIG_KALLSYMS_ALL=y
+@@ -319,7 +323,8 @@ CONFIG_LOG_BUF_SHIFT=12
+ # CONFIG_DM_SNAPSHOT is not set
+ # CONFIG_DM_BOW is not set
+ # CONFIG_DM_USER is not set
+-# CONFIG_EROFS_FS is not set
++CONFIG_EROFS_FS=y
++CONFIG_EROFS_FS_ZIP=y
+ # CONFIG_BLK_DEV_RAM is not set
+ # CONFIG_BLK_DEV_UBLK is not set
+ # CONFIG_NET_SCH_NETEM is not set
+@@ -384,6 +389,7 @@ CONFIG_VIDEO_S5C73C2=m
+ CONFIG_VIDEO_S5K4E6=m
+ CONFIG_VIDEO_AK7375=m
+ CONFIG_VIDEO_IDG2030=m
++CONFIG_MEDIA_PLATFORM_SUPPORT=y
+ CONFIG_VIDEO_IMX_MIPI_CSIS=m
+ CONFIG_VIDEO_EXYNOS7_FLITE=m
+ CONFIG_CMA_SIZE_MBYTES=32
+@@ -391,3 +397,12 @@ CONFIG_CMA_SIZE_MBYTES=32
+ CONFIG_MAX86900=m
+ 
+ CONFIG_SEC_NFC_I2C=m
++
++# ZRAM LZ4/LZO compression for 3GB RAM
++CONFIG_ZRAM=m
++CONFIG_CRYPTO_LZ4=y
++CONFIG_CRYPTO_LZO=y
++
++# Disable BTF to avoid 5.6MB allocated .BTF section in Image exceeding 28MB boot partition
++# CONFIG_DEBUG_INFO_BTF is not set
++# CONFIG_DEBUG_INFO_BTF_MODULES is not set

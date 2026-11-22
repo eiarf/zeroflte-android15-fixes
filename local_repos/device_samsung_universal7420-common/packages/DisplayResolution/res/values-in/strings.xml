@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_resolution_title">Resolusi layar</string>
+    <string name="resolution_summary_fallback">QHD Bawaan (Default)</string>
+    <string name="resolution_intro">Pilih resolusi rendering layar. Resolusi lebih rendah mengurangi beban GPU Mali-T760 dan menghemat baterai tanpa merusak proporsi tampilan.</string>
+    <string name="current_resolution_value">Aktif: %1$s</string>
+
+    <string name="mode_qhd_title">QHD+ Bawaan (Default)</string>
+    <string name="mode_qhd_desc">Ketajaman penuh panel Super AMOLED sesuai resolusi fisik dan DPI standar sistem.</string>
+
+    <string name="mode_fhd_title">FHD (Seimbang)</string>
+    <string name="mode_fhd_desc">Mengurangi beban pixel GPU sekitar 44% agar animasi 60 FPS lebih mulus dan baterai lebih awet.</string>
+
+    <string name="mode_hd_title">HD (Hemat daya)</string>
+    <string name="mode_hd_desc">Beban GPU paling ringan dan penghematan daya maksimal, cocok untuk penggunaan ringan atau gaming.</string>
+
+    <string name="resolution_footer_note">Perubahan langsung diterapkan dan tersimpan otomatis saat restart tanpa perlu reboot.</string>
+    <string name="resolution_apply_failed">Gagal menerapkan resolusi layar</string>
+
+    <string name="summary_mode_qhd">QHD (%1$d × %2$d · Default)</string>
+    <string name="summary_mode_fhd">FHD (%1$d × %2$d)</string>
+    <string name="summary_mode_hd">HD (%1$d × %2$d)</string>
+</resources>

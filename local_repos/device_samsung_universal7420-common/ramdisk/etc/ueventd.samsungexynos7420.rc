@@ -1,0 +1,223 @@
+/dev/mali0                0666   system     system
+/dev/ion                  0666   system     system
+/dev/ump                  0666   system     graphics
+/dev/exynos-mem           0660   system     graphics
+/dev/video0               0660   system     camera
+/dev/video1               0660   system     camera
+/dev/video2               0660   system     camera
+/dev/video3               0660   system     camera
+/dev/video20              0660   system     system
+/dev/video55              0660   system     graphics
+/dev/fimg2d               0666   system     graphics
+/dev/dri/*                0666   system     graphics
+/dev/i2c-2                0660   system     system
+/dev/HPD                  0660   system     system
+
+# gscalers
+/dev/video23              0660   media      graphics
+/dev/video26              0660   media      graphics
+
+/dev/video24              0660   media      graphics
+/dev/video27              0660   media      graphics
+/dev/video29              0660   media      graphics
+/dev/video30              0660   media      graphics
+# video31 is used for DECON Ext WB
+/dev/video31              0660   media      graphics
+
+# mscalers
+/dev/video50              0660   mediacodec      drmrpc
+/dev/video51              0660   cameraserver     cameraserver
+/dev/m2m1shot_scaler0     0660   cameraserver     graphics
+/dev/m2m1shot_scaler1     0660   cameraserver     mediacodec
+
+/dev/v4l-subdev*          0660   system     camera
+/dev/media0               0660   system     camera
+/dev/media1               0660   system     camera
+
+# seiren Audio
+/dev/seiren               0660   mediacodec mediadrm
+
+#mixer
+/dev/video16              0660   system     audio
+/dev/video17              0660   system     system
+/dev/video18              0660   system     system
+/dev/video19              0660   system     system
+
+#CEC
+/dev/CEC                  0660   system     system
+
+# JPEG
+/dev/m2m1shot_jpeg        0660   cameraserver      media
+/dev/video12              0660   media      media
+/dev/video13              0660   cameraserver      media
+/dev/video14              0660   cameraserver      media
+
+# mfc
+/dev/video6               0660   mediacodec     mediadrm
+/dev/video7               0660   media      mediadrm
+/dev/video8               0660   media      mediadrm
+/dev/video9               0660   media      mediadrm
+
+# camera
+/dev/video101             0660   cameraserver      cameraserver
+/dev/video102             0660   cameraserver      cameraserver
+/dev/video103             0660   cameraserver      cameraserver
+/dev/video104             0660   cameraserver      cameraserver
+/dev/video105             0660   cameraserver      cameraserver
+/dev/video106             0660   cameraserver      cameraserver
+/dev/video109             0660   cameraserver      cameraserver
+/dev/video110             0660   cameraserver      cameraserver
+/dev/video111             0660   cameraserver      cameraserver
+/dev/video112             0660   cameraserver      cameraserver
+/dev/video120             0660   cameraserver      cameraserver
+/dev/video121             0660   cameraserver      cameraserver
+/dev/video122             0660   cameraserver      cameraserver
+/dev/video130             0660   cameraserver      cameraserver
+/dev/video131             0660   cameraserver      cameraserver
+/dev/video132             0660   cameraserver      cameraserver
+/dev/video140             0660   cameraserver      cameraserver
+/dev/video141             0660   cameraserver      cameraserver
+/dev/video142             0660   cameraserver      cameraserver
+/dev/video150             0660   cameraserver      cameraserver
+/dev/video151             0660   cameraserver      cameraserver
+/dev/video152             0660   cameraserver      cameraserver
+/dev/video160             0660   cameraserver      cameraserver
+/dev/video161             0660   cameraserver      cameraserver
+/dev/video170             0660   cameraserver      cameraserver
+/dev/video171             0660   cameraserver      cameraserver
+/dev/video172             0660   cameraserver      cameraserver
+/dev/video173             0660   cameraserver      cameraserver
+/dev/video174             0660   cameraserver      cameraserver
+/dev/video180             0660   cameraserver      cameraserver
+/dev/video210             0660   cameraserver      cameraserver
+/dev/video211             0660   cameraserver      cameraserver
+/dev/video212             0660   cameraserver      cameraserver
+/dev/video213             0660   cameraserver      cameraserver
+/dev/video214             0660   cameraserver      cameraserver
+/dev/video215             0660   cameraserver      cameraserver
+/dev/video216             0660   cameraserver      cameraserver
+/dev/video217             0660   cameraserver      cameraserver
+/dev/video218             0660   cameraserver      cameraserver
+/dev/video219             0660   cameraserver      cameraserver
+/dev/video220             0660   cameraserver      cameraserver
+/dev/video221             0660   cameraserver      cameraserver
+/dev/video222             0660   cameraserver      cameraserver
+/dev/video223             0660   cameraserver      cameraserver
+/dev/video224             0660   cameraserver      cameraserver
+/dev/video225             0660   cameraserver      cameraserver
+/dev/video227             0660   cameraserver      cameraserver
+/dev/video231             0660   cameraserver      cameraserver
+/dev/media2               0660   media      media
+
+# MobiCore
+/dev/mobicore             0700   system     system
+/dev/mobicore-user        0666   radio      system
+
+# Secure MEM driver
+/dev/s5p-smem             0660   system        system
+
+# Fingerprint Sensor
+/dev/vfsspi        0660   system     system
+/dev/esfp0        0660   system     system
+
+# MIF
+/dev/block/platform/15570000.ufs/by-name/RADIO     0660   system     radio
+/dev/block/platform/15570000.ufs/by-name/DNT     0660   system     system
+/dev/block/mmcblk0p13     0660   system     radio
+/dev/block/mmcblk0p15     0660   system     system
+/dev/umts*                0660   system     radio
+/dev/umts_csd             0660   system     loop_radio
+/dev/smd4		  0660	 system	    radio
+
+# QCOM MIF
+/dev/subsys_esoc*         0660   system     radio
+/dev/mhi_pipe_*             0660   radio      radio
+/dev/esoc-*             0660   system    radio
+
+# sensor sysfs properties
+/sys/devices/virtual/input/input*	poll_delay	0660	system	radio
+/sys/devices/virtual/input/input*	enable		0660	system	radio
+/dev/input/event*	  0660   system		input
+
+# Sensorhub IIO
+/dev/ssp_sensorhub        0660   system		system
+/dev/batch_io		  0600   system         system
+/dev/iio:device*          0660   system		system
+/sys/devices/14d30000.spi/spi_master/spi1/spi1.0/iio:device*    buffer/enable       0660    system    system
+/sys/devices/14d30000.spi/spi_master/spi1/spi1.0/iio:device*    buffer/length       0660    system    system
+/sys/bus/iio/devices/iio:device*    0664   system     radio
+/sys/bus/iio/devices/iio:device*	poll_delay	0660	system	system
+
+# Broadcom Sensorhub Bridge Driver
+/dev/bbd_sensor           0660   system     system
+/dev/bbd_control          0660   system     system
+/dev/bbd_packet           0660   system     system
+/dev/bbd_reliable         0660   system     system
+/dev/bbd_sio              0660   system     system
+/dev/bbd_patch            0660   system     system
+/dev/ttyBCM*              0660   system     system
+
+# BCM4773 power line on the NK 6.6 kernel, driven by lhd
+/sys/devices/platform/bbd.0    nstandby    0660    gps    system
+
+# BCM4773 sensor hub IIO devices on the NK 6.6 kernel, for the sensors HAL
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    sampling_frequency                     0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    buffer/enable                          0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    buffer/length                          0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_accel_x_en            0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_accel_y_en            0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_accel_z_en            0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_anglvel_x_en          0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_anglvel_y_en          0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_anglvel_z_en          0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_magn_x_en             0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_magn_y_en             0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_magn_z_en             0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_pressure_en           0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_temp_en               0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_intensity_red_en      0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_intensity_green_en    0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_intensity_blue_en     0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_intensity_clear_en    0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_intensity0_en         0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_intensity1_en         0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_proximity0_en         0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_proximity1_en         0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_rot_quaternion_en     0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_steps_en              0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_activity_en           0664    system    system
+/sys/devices/platform/soc@0/14d30000.spi/spi_master/spi*/spi*.0/*/*/iio:device*    scan_elements/in_timestamp_en          0664    system    system
+
+# Reactivation lock
+/dev/block/platform/15570000.ufs/by-name/STEADY    0660    system    system
+
+# Google FRP solution
+/dev/block/platform/15570000.ufs/by-name/PERSISTENT    0660    system    system
+
+# FM Radio
+/dev/radio0               0660   system     audio
+
+/dev/rtc0                 0660   system     system
+
+# NK 6.6 kernel lights (android.hardware.light-service.universal7420).
+# delay_on and delay_off appear when the timer trigger is set; the trigger's
+# change uevent applies these to them.
+/sys/devices/platform/soc@0/13900000.dsi/13900000.dsi.0/backlight/s6e3ha2  brightness       0664  system  system
+/sys/devices/platform/i2c-max77843/i2c-*/*-0066/max77843-led/leds/rgb:status  brightness       0664  system  system
+/sys/devices/platform/i2c-max77843/i2c-*/*-0066/max77843-led/leds/rgb:status  multi_intensity  0664  system  system
+/sys/devices/platform/i2c-max77843/i2c-*/*-0066/max77843-led/leds/rgb:status  trigger          0664  system  system
+/sys/devices/platform/i2c-max77843/i2c-*/*-0066/max77843-led/leds/rgb:status  delay_on         0664  system  system
+/sys/devices/platform/i2c-max77843/i2c-*/*-0066/max77843-led/leds/rgb:status  delay_off        0664  system  system
+
+# Samsung S3FWRN5 NFC
+/dev/sec-nfc              0660   nfc        nfc
+
+# MAX86900 Heart-Rate IIO
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/iio:device*   buffer/enable                     0664   system   system
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/iio:device*   buffer/length                     0664   system   system
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/*/iio:device* buffer/enable                     0664   system   system
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/*/iio:device* buffer/length                     0664   system   system
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/*/iio:device* scan_elements/in_count_en         0664   system   system
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/*/iio:device* scan_elements/in_intensity_ir_en  0664   system   system
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/*/iio:device* scan_elements/in_intensity_red_en 0664   system   system
+/sys/devices/platform/soc@0/14e00000.i2c/i2c-*/*/iio:device* scan_elements/in_timestamp_en     0664   system   system

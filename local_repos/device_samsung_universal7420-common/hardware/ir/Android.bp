@@ -1,0 +1,30 @@
+//
+// Copyright (C) 2026 The LineageOS Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+cc_binary {
+    name: "android.hardware.ir-service.universal7420",
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["android.hardware.ir-service.universal7420.rc"],
+    vintf_fragments: ["android.hardware.ir-service.universal7420.xml"],
+    srcs: ["ir_service.cpp"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "liblog",
+    ],
+    static_libs: [
+        "android.hardware.ir-V1-ndk",
+    ],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-Wno-missing-field-initializers",
+    ],
+    cpp_std: "gnu++20",
+}

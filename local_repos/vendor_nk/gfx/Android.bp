@@ -1,0 +1,278 @@
+//
+// vendor/nk/gfx - Mesa Panfrost 24.0.9 + s6kms DRM/KMS HWC (minigbm + s6_drm_gralloc compat)
+//
+
+soong_namespace {
+}
+
+cc_library_shared {
+    name: "hwcomposer.s6kms",
+    relative_install_path: "hw",
+    vendor: true,
+    compile_multilib: "64",
+    srcs: ["s6_kms_hwcomposer.cpp"],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-missing-field-initializers",
+    ],
+    header_libs: [
+        "libhardware_headers",
+        "libsystem_headers",
+    ],
+    shared_libs: [
+        "libdrm",
+        "liblog",
+        "libcutils",
+    ],
+    required: [
+        "hwcomposer.samsungexynos7420_symlink",
+    ],
+}
+
+install_symlink {
+    name: "hwcomposer.samsungexynos7420_symlink",
+    vendor: true,
+    installed_location: "lib64/hw/hwcomposer.samsungexynos7420.so",
+    symlink_target: "hwcomposer.s6kms.so",
+}
+
+install_symlink {
+    name: "gralloc.default.32_symlink",
+    vendor: true,
+    installed_location: "lib/hw/gralloc.default.so",
+    symlink_target: "gralloc.minigbm.so",
+}
+
+install_symlink {
+    name: "gralloc.default.64_symlink",
+    vendor: true,
+    installed_location: "lib64/hw/gralloc.default.so",
+    symlink_target: "gralloc.minigbm.so",
+}
+
+cc_prebuilt_library_shared {
+    name: "libnk_c++_shared",
+    stem: "libc++_shared",
+    vendor: true,
+    compile_multilib: "64",
+    strip: { none: true },
+    check_elf_files: false,
+    arch: { arm64: { srcs: ["mesa/libc++_shared.so"] } },
+}
+
+cc_prebuilt_library_shared {
+    name: "libglapi",
+    vendor: true,
+    compile_multilib: "64",
+    strip: { none: true },
+    check_elf_files: false,
+    arch: { arm64: { srcs: ["mesa/libglapi.so"] } },
+}
+
+cc_prebuilt_library_shared {
+    name: "libgbm_mesa",
+    vendor: true,
+    compile_multilib: "64",
+    strip: { none: true },
+    check_elf_files: false,
+    shared_libs: ["libcutils", "libdrm"],
+    arch: { arm64: { srcs: ["mesa/libgbm_mesa.so"] } },
+    required: ["libgbm_symlink"],
+}
+
+install_symlink {
+    name: "libgbm_symlink",
+    vendor: true,
+    installed_location: "lib64/libgbm.so",
+    symlink_target: "libgbm_mesa.so",
+}
+
+cc_prebuilt_library_shared {
+    name: "libEGL_mesa",
+    relative_install_path: "egl",
+    vendor: true,
+    compile_multilib: "64",
+    strip: { none: true },
+    check_elf_files: false,
+    shared_libs: [
+        "libglapi",
+        "libcutils",
+        "libhardware",
+        "liblog",
+        "libnativewindow",
+        "libsync",
+        "libdrm",
+    ],
+    arch: { arm64: { srcs: ["mesa/libEGL.so"] } },
+    required: [
+        "libEGL_symlink",
+        "libEGL_angle_symlink",
+        "libEGL_default_symlink",
+        "libEGL_exynos5_symlink",
+    ],
+}
+
+install_symlink {
+    name: "libEGL_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libEGL.so",
+    symlink_target: "libEGL_mesa.so",
+}
+
+install_symlink {
+    name: "libEGL_angle_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libEGL_angle.so",
+    symlink_target: "libEGL_mesa.so",
+}
+
+install_symlink {
+    name: "libEGL_default_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libEGL_default.so",
+    symlink_target: "libEGL_mesa.so",
+}
+
+install_symlink {
+    name: "libEGL_exynos5_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libEGL_exynos5.so",
+    symlink_target: "libEGL_mesa.so",
+}
+
+cc_prebuilt_library_shared {
+    name: "libGLESv1_CM_mesa",
+    relative_install_path: "egl",
+    vendor: true,
+    compile_multilib: "64",
+    strip: { none: true },
+    check_elf_files: false,
+    shared_libs: ["libglapi"],
+    arch: { arm64: { srcs: ["mesa/libGLESv1_CM.so"] } },
+    required: [
+        "libGLESv1_CM_symlink",
+        "libGLESv1_CM_angle_symlink",
+        "libGLESv1_CM_default_symlink",
+        "libGLESv1_CM_exynos5_symlink",
+    ],
+}
+
+install_symlink {
+    name: "libGLESv1_CM_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv1_CM.so",
+    symlink_target: "libGLESv1_CM_mesa.so",
+}
+
+install_symlink {
+    name: "libGLESv1_CM_angle_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv1_CM_angle.so",
+    symlink_target: "libGLESv1_CM_mesa.so",
+}
+
+install_symlink {
+    name: "libGLESv1_CM_default_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv1_CM_default.so",
+    symlink_target: "libGLESv1_CM_mesa.so",
+}
+
+install_symlink {
+    name: "libGLESv1_CM_exynos5_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv1_CM_exynos5.so",
+    symlink_target: "libGLESv1_CM_mesa.so",
+}
+
+cc_prebuilt_library_shared {
+    name: "libGLESv2_mesa",
+    relative_install_path: "egl",
+    vendor: true,
+    compile_multilib: "64",
+    strip: { none: true },
+    check_elf_files: false,
+    shared_libs: ["libglapi"],
+    arch: { arm64: { srcs: ["mesa/libGLESv2.so"] } },
+    required: [
+        "libGLESv2_symlink",
+        "libGLESv2_angle_symlink",
+        "libGLESv2_default_symlink",
+        "libGLESv2_exynos5_symlink",
+    ],
+}
+
+install_symlink {
+    name: "libGLESv2_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv2.so",
+    symlink_target: "libGLESv2_mesa.so",
+}
+
+install_symlink {
+    name: "libGLESv2_angle_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv2_angle.so",
+    symlink_target: "libGLESv2_mesa.so",
+}
+
+install_symlink {
+    name: "libGLESv2_default_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv2_default.so",
+    symlink_target: "libGLESv2_mesa.so",
+}
+
+install_symlink {
+    name: "libGLESv2_exynos5_symlink",
+    vendor: true,
+    installed_location: "lib64/egl/libGLESv2_exynos5.so",
+    symlink_target: "libGLESv2_mesa.so",
+}
+
+cc_prebuilt_library_shared {
+    name: "panfrost_dri",
+    relative_install_path: "dri",
+    vendor: true,
+    compile_multilib: "64",
+    strip: { none: true },
+    check_elf_files: false,
+    shared_libs: [
+        "libcutils",
+        "liblog",
+        "libsync",
+        "libglapi",
+        "libdrm",
+        "libz",
+        "libnk_c++_shared",
+    ],
+    arch: { arm64: { srcs: ["mesa/dri/panfrost_dri.so"] } },
+    required: [
+        "exynos_dri_symlink",
+        "panfrost_dri_vendor_symlink",
+        "exynos_dri_vendor_symlink",
+    ],
+}
+
+install_symlink {
+    name: "exynos_dri_symlink",
+    vendor: true,
+    installed_location: "lib64/dri/exynos_dri.so",
+    symlink_target: "panfrost_dri.so",
+}
+
+install_symlink {
+    name: "panfrost_dri_vendor_symlink",
+    vendor: true,
+    installed_location: "lib64/panfrost_dri.so",
+    symlink_target: "dri/panfrost_dri.so",
+}
+
+install_symlink {
+    name: "exynos_dri_vendor_symlink",
+    vendor: true,
+    installed_location: "lib64/exynos_dri.so",
+    symlink_target: "dri/panfrost_dri.so",
+}

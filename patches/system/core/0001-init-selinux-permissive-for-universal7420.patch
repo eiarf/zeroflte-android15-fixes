@@ -1,0 +1,18 @@
+diff --git a/init/selinux.cpp b/init/selinux.cpp
+index 4baf9a4..c8e76d3 100644
+--- a/init/selinux.cpp
++++ b/init/selinux.cpp
+@@ -112,10 +112,9 @@ EnforcingStatus StatusFromProperty() {
+ }
+ 
+ bool IsEnforcing() {
+-    if (ALLOW_PERMISSIVE_SELINUX) {
+-        return StatusFromProperty() == SELINUX_ENFORCING;
+-    }
+-    return true;
++    // universal7420: permanently permissive to prevent Treble vendor HAL crashes on user builds
++    (void)StatusFromProperty();
++    return false;
+ }
+ 
+ bool ReadFirstLine(const char* file, std::string* line) {

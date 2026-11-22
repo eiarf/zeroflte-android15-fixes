@@ -1,0 +1,37 @@
+From: zeroflte-rising17 <eiarf@users.noreply.github.com>
+Subject: [PATCH] addons: drop heavy optional third-party emoji fonts (~116 MiB) for small system partition
+
+Retains standard system NotoColorEmoji and all custom UI/clock fonts while
+freeing ~116 MiB on /system/product for devices with ~3 GiB SYSTEM partition.
+---
+diff --git a/config.mk b/config.mk
+index 2ee8094..9e3837a 100644
+--- a/config.mk
++++ b/config.mk
+@@ -29,10 +29,6 @@ endif
+ # Fonts
+ PRODUCT_PACKAGES += \
+     fonts_customization.xml \
+-    fonts_customization_emoji_facebook.xml \
+-    fonts_customization_emoji_ios.xml \
+-    fonts_customization_emoji_samsung.xml \
+-    fonts_customization_emoji_swiftui.xml \
+     ClockFontACFilmstripOverlay \
+     ClockFontAccuratistOverlay \
+     ClockFontAclonicaOverlay \
+@@ -467,9 +463,14 @@ $(call inherit-product-if-exists, external/google-fonts/lato/fonts.mk)
+ $(call inherit-product-if-exists, external/google-fonts/rubik/fonts.mk)
+ $(call inherit-product-if-exists, external/google-fonts/google-sans-flex/fonts.mk)
+ 
++ifeq ($(TARGET_EXCLUDE_CUSTOM_FONTS),true)
+ PRODUCT_COPY_FILES += \
+-    $(call find-copy-subdir-files,*,vendor/addons/prebuilt/product/fonts,$(TARGET_COPY_OUT_PRODUCT)/fonts) \
+     $(call find-copy-subdir-files,*,vendor/addons/prebuilt/product/media/audio/ui,$(TARGET_COPY_OUT_PRODUCT)/media/audio/ui)
++else
++PRODUCT_COPY_FILES += \
++    $(filter-out %/FacebookEmoji.ttf %/LunarisIosEmoji.ttf %/SwiftUIEmoji.ttf %/SamsungColorEmoji.ttf,$(call find-copy-subdir-files,*,vendor/addons/prebuilt/product/fonts,$(TARGET_COPY_OUT_PRODUCT)/fonts)) \
++    $(call find-copy-subdir-files,*,vendor/addons/prebuilt/product/media/audio/ui,$(TARGET_COPY_OUT_PRODUCT)/media/audio/ui)
++endif
+ 
+ PRODUCT_PRODUCT_PROPERTIES += \
+     persist.sys.ax_emoji_style=android

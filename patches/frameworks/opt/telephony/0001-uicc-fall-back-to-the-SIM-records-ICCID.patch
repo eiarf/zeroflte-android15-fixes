@@ -1,0 +1,92 @@
+From 9caa8fda48c01f6694480c7079e529ad154704ae Mon Sep 17 00:00:00 2001
+From: FAROVITUS <farovitus@gmail.com>
+Date: Thu, 12 Nov 2026 13:40:24 +0200
+Subject: [PATCH] uicc: fall back to the SIM records ICCID when the card status
+ has none
+
+Legacy HIDL RILs (a radio 1.4 libril on top of a RIL_CardStatus_v6
+vendor RIL, as on the Galaxy S6) send an empty ICCID in the card status
+and do not support getSimSlotsStatus. UiccSlot and UiccPort store the
+empty string. UiccPort.getIccId() falls back to the ICCID read from
+EF_ICCID only when the stored value is null, so SubscriptionManagerService
+sees "" and logs "No ICCID available for phone 0". The SIM loads, but no
+subscription is mapped to the slot: the allowed network types are never
+sent, and the modem stays NOT_REG_MT_NOT_SEARCHING_OP (emergency calls
+only).
+
+Treat an empty card status ICCID like a missing one. UiccPort returns
+the SIM records ICCID, and UiccSlot.getIccId() asks the port, so the
+inserted-SIM list also sees the card. Until the records hold an ICCID,
+both keep returning the card status value: UiccProfile.getIccId() is
+null before EF_ICCID is read, and SubscriptionManagerService passes the
+port's ICCID straight to a regex matcher.
+
+Change-Id: I7c3168f0ba991f2f88c2ba3cc72c02ad3f91052c
+Signed-off-by: FAROVITUS <farovitus@gmail.com>
+---
+ .../android/internal/telephony/uicc/UiccPort.java  | 12 +++++++-----
+ .../android/internal/telephony/uicc/UiccSlot.java  | 14 +++++++++++++-
+ 2 files changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/src/java/com/android/internal/telephony/uicc/UiccPort.java b/src/java/com/android/internal/telephony/uicc/UiccPort.java
+index 3f59582..1f4867f 100644
+--- a/src/java/com/android/internal/telephony/uicc/UiccPort.java
++++ b/src/java/com/android/internal/telephony/uicc/UiccPort.java
+@@ -22,6 +22,7 @@ import android.os.IBinder;
+ import android.os.Message;
+ import android.os.RemoteException;
+ import android.telephony.SubscriptionInfo;
++import android.text.TextUtils;
+ import android.util.IndentingPrintWriter;
+ 
+ import com.android.internal.annotations.GuardedBy;
+@@ -358,13 +359,14 @@ public class UiccPort {
+      * Return the IccId corresponding to the port.
+      */
+     public String getIccId() {
+-        if (mIccid != null) {
++        if (!TextUtils.isEmpty(mIccid)) {
+             return mIccid;
+-        } else if (mUiccProfile != null) {
+-            return mUiccProfile.getIccId();
+-        } else {
+-            return null;
+         }
++        // Legacy RILs send an empty ICCID in the card status. Use the one
++        // read from EF_ICCID once the SIM records have it; until then keep
++        // the card status value, as an unpatched port would.
++        String recordsIccId = (mUiccProfile != null) ? mUiccProfile.getIccId() : null;
++        return (recordsIccId != null) ? recordsIccId : mIccid;
+     }
+ 
+     private void log(String msg) {
+diff --git a/src/java/com/android/internal/telephony/uicc/UiccSlot.java b/src/java/com/android/internal/telephony/uicc/UiccSlot.java
+index 700dd5f..f0f4be5 100644
+--- a/src/java/com/android/internal/telephony/uicc/UiccSlot.java
++++ b/src/java/com/android/internal/telephony/uicc/UiccSlot.java
+@@ -541,9 +541,21 @@ public class UiccSlot extends Handler {
+      *  Use this API to get the iccId of the inactive port only.
+      */
+     public String getIccId(int portIdx) {
++        String iccId;
+         synchronized (mLock) {
+-            return mIccIds.get(portIdx);
++            iccId = mIccIds.get(portIdx);
++        }
++        if (TextUtils.isEmpty(iccId)) {
++            // Legacy RILs send no ICCID in the card status; use the one the
++            // port read from the SIM records instead.
++            UiccCard card = getUiccCard();
++            UiccPort port = (card == null) ? null : card.getUiccPort(portIdx);
++            String recordsIccId = (port == null) ? null : port.getIccId();
++            if (!TextUtils.isEmpty(recordsIccId)) {
++                iccId = recordsIccId;
++            }
+         }
++        return iccId;
+     }
+ 
+     public String getEid() {
+-- 
+2.54.0 (Apple Git-157)
+

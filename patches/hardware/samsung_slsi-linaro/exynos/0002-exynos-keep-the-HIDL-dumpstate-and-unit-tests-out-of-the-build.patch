@@ -1,0 +1,43 @@
+From b79e107e0bc5d7f2e15246dfb588fa02c9a184ea Mon Sep 17 00:00:00 2001
+From: FAROVITUS <farovitus@gmail.com>
+Date: Sun, 15 Nov 2026 17:14:57 +0000
+Subject: [PATCH] exynos: keep the HIDL dumpstate and unit tests out of the
+ build
+
+Lineage 24 (Android 17) removed the HIDL android.hardware.dumpstate@1.0
+interface, and two unit test directories here link external/freetype's
+libft2, which is no longer visible to them. Soong reads every Android.bp
+in the tree, so these three directories stop the build before anything
+compiles, although my device installs none of them:
+
+- dumpstate: android.hardware.dumpstate@1.0-service.exynos depends on the
+  removed interface.
+- libhdr/unittest (CS_04_hdrdrvTest) and libdisplaycolor/unittest
+  (CS_05_dqedriver) depend on //external/freetype:libft2.
+
+An empty .find-ignore makes the file finder skip each directory, as the
+ssp one already does.
+
+Change-Id: Id3812178fa5aac4b43c1b8301b5823b5999f38ef
+Signed-off-by: FAROVITUS <farovitus@gmail.com>
+---
+ dumpstate/.find-ignore                | 0
+ libdisplaycolor/unittest/.find-ignore | 0
+ libhdr/unittest/.find-ignore          | 0
+ 3 files changed, 0 insertions(+), 0 deletions(-)
+ create mode 100644 dumpstate/.find-ignore
+ create mode 100644 libdisplaycolor/unittest/.find-ignore
+ create mode 100644 libhdr/unittest/.find-ignore
+
+diff --git a/dumpstate/.find-ignore b/dumpstate/.find-ignore
+new file mode 100644
+index 0000000..e69de29
+diff --git a/libdisplaycolor/unittest/.find-ignore b/libdisplaycolor/unittest/.find-ignore
+new file mode 100644
+index 0000000..e69de29
+diff --git a/libhdr/unittest/.find-ignore b/libhdr/unittest/.find-ignore
+new file mode 100644
+index 0000000..e69de29
+-- 
+2.34.1
+

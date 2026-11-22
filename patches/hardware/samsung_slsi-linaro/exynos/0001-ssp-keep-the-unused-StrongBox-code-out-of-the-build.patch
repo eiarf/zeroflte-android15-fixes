@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: FAROVITUS <farovitus@gmail.com>
+Date: Wed, 11 Nov 2026 20:26:00 +0000
+Subject: [PATCH] ssp: keep the unused StrongBox code out of the build
+
+The ssp directory holds Samsung's StrongBox keymaster code, which my
+device does not use and which does not build in a Lineage 22.2 tree.
+An empty .find-ignore makes the build's file finder skip the directory,
+so none of its Android.bp or Android.mk files are read. Every Lineage
+22.2 zeroflte ROM I built had this file; it only lived in the build tree
+until now.
+
+Signed-off-by: FAROVITUS <farovitus@gmail.com>
+---
+ ssp/.find-ignore | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ create mode 100644 ssp/.find-ignore
+
+diff --git a/ssp/.find-ignore b/ssp/.find-ignore
+new file mode 100644
+index 0000000..e69de29
+-- 
+2.50.1
+

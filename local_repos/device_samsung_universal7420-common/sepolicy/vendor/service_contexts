@@ -1,0 +1,3 @@
+# Mapper 5 is a stable-C passthrough HAL: mapper.minigbm.so, declared in
+# VINTF as the native HAL "mapper", instance "minigbm".
+mapper/minigbm      u:object_r:hal_graphics_mapper_service:s0

@@ -1,0 +1,19 @@
+From: zeroflte-rising17 <eiarf@users.noreply.github.com>
+Subject: [PATCH] ASoC: samsung: zero_wm1840: use JD1 active-low micd_clamp_mode (0x4)
+
+Fixes inverted 3.5mm jack detection where plugging in triggered JACKDET rise
+and reported jack removal (HP Jack: Off) instead of headphone insertion.
+---
+diff --git a/sound/soc/samsung/zero_wm1840.c b/sound/soc/samsung/zero_wm1840.c
+index 674dc1ce9..9684d1475 100644
+--- a/sound/soc/samsung/zero_wm1840.c
++++ b/sound/soc/samsung/zero_wm1840.c
+@@ -71,7 +71,7 @@ static const struct madera_micd_range zero_micd_ranges[] = {
+ 
+ /* The stock accessory detect settings (wlf,* in the vendor DT). */
+ static const struct madera_jack_cfg zero_jack_cfg = {
+-	.micd_clamp_mode		= 0x8,
++	.micd_clamp_mode		= 0x4,
+ 	.micd_bias			= 2,
+ 	.micd_bias_start_time		= 1,
+ 	.micd_rate			= 7,

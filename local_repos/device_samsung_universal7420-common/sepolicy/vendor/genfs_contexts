@@ -1,0 +1,226 @@
+####################################
+# DebugFS
+#
+
+genfscon debugfs /mali/                         u:object_r:debugfs_mali:s0
+genfscon debugfs /mali/mem/                     u:object_r:debugfs_mali_mem:s0
+genfscon debugfs /dma_buf                       u:object_r:debugfs_ion:s0
+genfscon debugfs /ion                           u:object_r:debugfs_ion:s0
+genfscon debugfs /debug/ipa                     u:object_r:debugfs_ipa:s0
+
+####################################
+# Proc
+#
+
+genfscon proc /device-tree                      u:object_r:proc_dt_firmware:s0
+
+genfscon proc /sys/vm/dirty_ratio               u:object_r:proc_vm:s0
+genfscon proc /sys/vm/min_free_kbytes           u:object_r:proc_vm:s0
+
+genfscon proc /sys/vm/swappiness                u:object_r:proc_vm:s0
+genfscon proc /sys/vm/vfs_cache_pressure        u:object_r:proc_vm:s0
+
+genfscon proc /reset_reason                     u:object_r:proc_reset_reason:s0
+genfscon proc /simslot_count                    u:object_r:proc_simslot_count:s0
+
+genfscon proc /bus/input/devices                u:object_r:proc_input_devices:s0
+
+# SEC devices
+genfscon proc /sec_log                          u:object_r:proc_sec:s0
+
+genfscon proc /avc_msg                          u:object_r:proc_audit:s0
+
+genfscon proc /store_lastkmsg                   u:object_r:proc_reset_reason:s0
+
+genfscon proc /bluetooth/uart/log               u:object_r:proc_bluetooth:s0
+
+####################################
+# Sysfs
+#
+
+# Audio
+genfscon sysfs /devices/virtual/audio/earjack       u:object_r:sysfs_jack:s0
+genfscon sysfs /devices/virtual/audio/codec         u:object_r:sysfs_codec:s0
+
+# Camera
+genfscon sysfs /devices/virtual/camera                          u:object_r:sysfs_camera:s0
+
+# CPU/Scheduler devices
+
+genfscon sysfs /module/cpuidle/parameters/off                       u:object_r:sysfs_devices_system_cpu:s0
+
+genfscon sysfs /module/workqueue/parameters/power_efficient         u:object_r:sysfs_devices_system_cpu:s0
+
+# DECON TE state, read by the KMS HWC to pick its vsync source
+genfscon sysfs /module/exynosdrm/parameters                        u:object_r:sysfs_graphics:s0
+
+# Hall
+genfscon sysfs /devices/certify_hall.29/input  u:object_r:sysfs_hall:s0
+genfscon sysfs /devices/hall.28/input          u:object_r:sysfs_hall:s0
+
+# Input booster
+genfscon sysfs /class/input_booster/level   u:object_r:sysfs_input:s0
+genfscon sysfs /class/input_booster/head    u:object_r:sysfs_input:s0
+genfscon sysfs /class/input_booster/tail    u:object_r:sysfs_input:s0
+
+# Input devices
+genfscon sysfs /devices/gpio_keys.30/input/input16                                u:object_r:sysfs_input:s0
+genfscon sysfs /devices/gpio_keys.30/input/input15                                u:object_r:sysfs_input:s0
+genfscon sysfs /devices/gpio_keys.31/input/input16                                u:object_r:sysfs_input:s0
+genfscon sysfs /devices/gpio_keys.31/input/input15                                u:object_r:sysfs_input:s0
+genfscon sysfs /devices/14e10000.hsi2c/i2c-4/4-0049/input                         u:object_r:sysfs_input:s0
+genfscon sysfs /devices/14e10000.hsi2c/i2c-7/7-0049/input                         u:object_r:sysfs_input:s0
+genfscon sysfs /devices/14e10000.hsi2c/i2c-6/6-0049/input                         u:object_r:sysfs_input:s0
+genfscon sysfs /devices/14e10000.hsi2c/i2c-5/5-0049/input                         u:object_r:sysfs_input:s0
+genfscon sysfs /devices/14d20000.spi/spi_master/spi0/spi0.0/arizona-extcon/input  u:object_r:sysfs_input:s0
+
+# ION
+genfscon sysfs /devices/virtual/misc/ion                    u:object_r:sysfs_ion:s0
+
+# LHD
+genfscon sysfs /devices/14870000.pinctrl/gpio/gpio148       u:object_r:sysfs_lhd:s0
+
+# MMC block device cache files
+genfscon sysfs /devices/virtual/bdi/254:0/read_ahead_kb     u:object_r:sysfs_block:s0
+# 6.6: the UFS data LUN's queue. init.rc limits discard_max_bytes through
+# /dev/sys/block/by-name/{userdata,rootdisk}. Cover sda/sdb/sdc cleanly.
+genfscon sysfs /devices/platform/15570000.ufs/host0/target0:0:0/0:0:0:0/block/sda/queue u:object_r:sysfs_block:s0
+genfscon sysfs /devices/platform/15570000.ufs/host0/target0:0:0/0:0:0:0/block/sdb/queue u:object_r:sysfs_block:s0
+genfscon sysfs /devices/platform/15570000.ufs/host0/target0:0:0/0:0:0:0/block/sdc/queue u:object_r:sysfs_block:s0
+
+# Modem
+genfscon sysfs /bus/platform/drivers/mif_sipc5              u:object_r:sysfs_modem:s0
+genfscon sysfs /devices/platform/soc@0/10f24000.mipi-lli/lli_control u:object_r:sysfs_mipi:s0
+genfscon sysfs /devices/10580000.pinctrl/gpio/gpio8         u:object_r:sysfs_modem:s0
+
+# PCIe
+genfscon sysfs /devices/15660000.pcie1                      u:object_r:sysfs_pcie:s0
+
+# Power supply devices
+genfscon sysfs /devices/battery.55/power_supply                              u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/battery.54/power_supply                              u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/battery.53/power_supply                              u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/battery.52/power_supply                              u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13650000.hsi2c/i2c-1/1-0066/max77833-charger         u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13650000.hsi2c/i2c-1/1-0066/max77833-fuelgauge       u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13650000.hsi2c/i2c-1/1-0066/max77843-charger         u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13650000.hsi2c/i2c-1/1-0066/max77843-fuelgauge       u:object_r:sysfs_batteryinfo:s0
+
+# Wireless charger
+genfscon sysfs /devices/13690000.hsi2c/i2c-7/7-0061/power_supply    u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13670000.hsi2c/i2c-5/5-006c/power_supply    u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13670000.hsi2c/i2c-4/4-006c/power_supply    u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/14e30000.hsi2c/i2c-8/8-0061/power_supply    u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13690000.hsi2c/i2c-8/8-0061/power_supply    u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/13690000.hsi2c/i2c-6/6-0061/power_supply    u:object_r:sysfs_batteryinfo:s0
+
+genfscon sysfs /kernel/gpu                                          u:object_r:sysfs_power_writable:s0
+
+# Rmnet
+genfscon sysfs /devices/virtual/net/rmnet0    u:object_r:sysfs_net:s0
+genfscon sysfs /devices/virtual/net/rmnet1    u:object_r:sysfs_net:s0
+genfscon sysfs /devices/virtual/net/rmnet2    u:object_r:sysfs_net:s0
+genfscon sysfs /devices/virtual/net/rmnet3    u:object_r:sysfs_net:s0
+genfscon sysfs /devices/virtual/net/rmnet4    u:object_r:sysfs_net:s0
+genfscon sysfs /devices/virtual/net/rmnet5    u:object_r:sysfs_net:s0
+genfscon sysfs /devices/virtual/net/rmnet6    u:object_r:sysfs_net:s0
+genfscon sysfs /devices/virtual/net/rmnet7    u:object_r:sysfs_net:s0
+
+# SCSI
+genfscon sysfs /devices/15570000.ufs/host0    u:object_r:sysfs_scsi_host:s0
+
+# Touchkey
+genfscon sysfs /devices/14e70000.hsi2c/i2c-3/3-0020/input           u:object_r:sysfs_sec_touchkey:s0
+genfscon sysfs /devices/i2c.31/i2c-8/8-0010/input         u:object_r:sysfs_sec_touchkey:s0
+genfscon sysfs /devices/i2c.31/i2c-8/8-0020/input         u:object_r:sysfs_sec_touchkey:s0
+genfscon sysfs /devices/i2c.31/i2c-9/9-0010/input         u:object_r:sysfs_sec_touchkey:s0
+genfscon sysfs /devices/i2c.31/i2c-9/9-0020/input         u:object_r:sysfs_sec_touchkey:s0
+genfscon sysfs /devices/i2c.31/i2c-10/10-0010/input        u:object_r:sysfs_sec_touchkey:s0
+genfscon sysfs /devices/i2c.31/i2c-10/10-0020/input        u:object_r:sysfs_sec_touchkey:s0
+genfscon sysfs /devices/virtual/sec/sec_touchkey      u:object_r:sysfs_sec_touchkey:s0
+# 6.6: the touchkey controller is the only device on its i2c-gpio bus.
+genfscon sysfs /devices/platform/i2c-touchkey                  u:object_r:sysfs_sec_touchkey:s0
+
+# Touchscreen: the stmfts i2c controller and everything below it,
+# including the input device's name and inhibited attributes.
+genfscon sysfs /devices/platform/soc@0/14e10000.i2c                 u:object_r:sysfs_stmfts:s0
+
+# USB lun device
+genfscon sysfs /devices/15400000.usb/15400000.dwc3/gadget/lun0      u:object_r:sysfs_android_usb:s0
+
+# USB
+genfscon sysfs /devices/virtual/android_usb/android0                u:object_r:sysfs_android_usb:s0
+
+# video4linux
+genfscon sysfs /devices/fimc_is_companion.38/video4linux            u:object_r:sysfs_v4l:s0
+genfscon sysfs /devices/fimc_is_companion.37/video4linux            u:object_r:sysfs_v4l:s0
+
+genfscon sysfs /kernel/mm/vmscan/mem_boost_mode                     u:object_r:sysfs_vmscan:s0
+
+# 6.6: the sec-battery-compat "battery" and "ac" power supplies, including
+# battery/charging_enabled, which Lineage's health HAL writes.
+genfscon sysfs /devices/platform/sec-battery-compat/power_supply    u:object_r:sysfs_batteryinfo:s0
+# The MAX77843 fuel gauge and charger supplies, both MFD children of the
+# PMIC at 3-0066, which the health HAL enumerates under
+# /sys/class/power_supply. The i2c-gpio bus number is assigned at probe
+# (no DT alias); update these paths if it moves.
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-fuelgauge/power_supply u:object_r:sysfs_batteryinfo:s0
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-charger/power_supply u:object_r:sysfs_batteryinfo:s0
+
+# 6.6: the BCM4773 bridge. lhd drives the hub's power line through nstandby.
+genfscon sysfs /devices/platform/bbd.0                              u:object_r:sysfs_bbd:s0
+genfscon sysfs /devices/platform/bbd.0/nstandby                     u:object_r:sysfs_gps_writable:s0
+
+# 6.6: the BCM4773 sensor hub's IIO devices, under the SPI1 controller.
+genfscon sysfs /devices/platform/soc@0/14d30000.spi                 u:object_r:sysfs_ssp_iio:s0
+
+# 6.6 DRM: libdrm reads each DRM device's uevent to identify it (exynos-drm
+# display, the early simple-framebuffer, the panfrost GPU). sysfs_gpu is
+# what AOSP lets GPU clients read.
+genfscon sysfs /devices/platform/exynos-drm/uevent                  u:object_r:sysfs_gpu:s0
+genfscon sysfs /devices/platform/e2a00000.framebuffer/uevent        u:object_r:sysfs_gpu:s0
+genfscon sysfs /devices/platform/soc@0/14ac0000.gpu/uevent          u:object_r:sysfs_gpu:s0
+
+# 6.6: mdnie-compat provides the mdnie and lcd/panel attributes that the
+# LiveDisplay HAL drives.
+genfscon sysfs /devices/platform/mdnie-compat                       u:object_r:sysfs_mdnie:s0
+
+# 6.6 wakeup sources that system_suspend reads. The PMIC's i2c-gpio bus
+# number is assigned at probe (no DT alias).
+genfscon sysfs /devices/platform/soc@0/soc@0:usb@15400000/15400000.usb/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/i2c-tsp-main-pmic/i2c-1/1-0066/s2mps15-rtc/rtc/rtc0/alarmtimer.0.auto/wakeup u:object_r:sysfs_wakeup:s0
+# The Shannon 333 modem (node mif_pdata, the stock name cbd looks for,
+# with cp_status/value, which cbd polls during the CP boot) and its
+# wakeup source, and the battery supply's own wakeup directory (the rest
+# of the supply stays sysfs_batteryinfo).
+genfscon sysfs /devices/platform/mif_pdata                          u:object_r:sysfs_modem:s0
+genfscon sysfs /devices/platform/mif_pdata/wakeup                   u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/sec-battery-compat/power_supply/battery/wakeup u:object_r:sysfs_wakeup:s0
+# The other power supplies' own wakeup directories. The platform lets
+# system_suspend search every sysfs directory and read sysfs_wakeup.
+genfscon sysfs /devices/platform/sec-battery-compat/power_supply/ac/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-fuelgauge/power_supply/max77843-fuelgauge/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-charger/power_supply/max77843-charger/wakeup u:object_r:sysfs_wakeup:s0
+# The remaining device wakeup sources: the MAX77843 and S2MPS15 PMICs,
+# the MAX77843 charger device, the S2MPS15 RTC, the power and volume
+# keys, the Wi-Fi PCIe function and the Bluetooth UART (serdev).
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-charger/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-muic/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/i2c-tsp-main-pmic/i2c-1/1-0066/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/i2c-tsp-main-pmic/i2c-1/1-0066/s2mps15-rtc/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/gpio-keys/wakeup                   u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/157b0000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/wakeup u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/soc@0/11460000.serial/serial0/serial0-0/wakeup u:object_r:sysfs_wakeup:s0
+# The BCM4773 bridge's wakeup source, inside the SPI1 tree that is
+# otherwise sysfs_ssp_iio.
+genfscon sysfs /devices/platform/soc@0/14d30000.spi/spi_master/spi1/spi1.0/wakeup u:object_r:sysfs_wakeup:s0
+# The MAX77843 MUIC's extcon device and its cable.N entries, read by
+# WiredAccessoryManager.
+genfscon sysfs /devices/platform/i2c-max77843/i2c-3/3-0066/max77843-muic/extcon u:object_r:sysfs_extcon:s0
+
+# MAX86900 Heart-Rate IIO sysfs tree under hsi2c_1 / 14e00000.i2c.
+genfscon sysfs /devices/platform/soc@0/14e00000.i2c                 u:object_r:sysfs_ssp_iio:s0
+
+# IR blaster virtual sensors symlink target.
+genfscon sysfs /devices/virtual/sensors/irled_remote                u:object_r:sysfs_sensors_writable:s0

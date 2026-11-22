@@ -1,0 +1,38 @@
+//
+// Copyright (C) 2026 The LineageOS Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+cc_binary {
+    name: "android.hardware.gnss-service.universal7420",
+    relative_install_path: "hw",
+    vendor: true,
+    vintf_fragments: ["android.hardware.gnss-service.universal7420.xml"],
+    srcs: ["gnss_service.cpp"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libhardware",
+        "liblog",
+        "libutils",
+    ],
+    static_libs: [
+        "android.hardware.gnss-V3-ndk",
+    ],
+    header_libs: [
+        "libhardware_headers",
+    ],
+    required: [
+        "libsecril-client",
+    ],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-Wno-missing-field-initializers",
+    ],
+    cpp_std: "gnu++20",
+}

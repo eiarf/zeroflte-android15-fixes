@@ -1,0 +1,59 @@
+# Audio
+ro.vendor.audio_hal.force_voice_config=wide
+ro.config.alarm_vol_steps=15
+ro.config.media_vol_steps=25
+ro.config.system_vol_steps=15
+ro.config.vc_call_vol_steps=7
+
+# Bluetooth
+bluetooth.device.class_of_device=90,2,12
+bluetooth.profile.a2dp.source.enabled?=true
+bluetooth.profile.asha.central.enabled?=true
+bluetooth.profile.avrcp.target.enabled?=true
+bluetooth.profile.bas.client.enabled?=true
+bluetooth.profile.gatt.enabled?=true
+bluetooth.profile.hfp.ag.enabled?=true
+bluetooth.profile.hid.device.enabled?=true
+bluetooth.profile.hid.host.enabled?=true
+bluetooth.profile.map.server.enabled?=true
+bluetooth.profile.opp.enabled?=true
+bluetooth.profile.pan.nap.enabled?=true
+bluetooth.profile.pan.panu.enabled?=true
+bluetooth.profile.pbap.server.enabled?=true
+bluetooth.profile.sap.server.enabled?=true
+
+# Board
+ro.chipname=exynos7420
+
+# Fingerprint HAL
+ro.vendor.fingerprint.type=home
+ro.vendor.fingerprint.uses_percentage_samples=true
+
+# Graphics
+ro.hardware.egl=mesa
+ro.hardware.gralloc=minigbm
+ro.hardware.hwcomposer=s6kms
+# Turn the CRTC off with the screen, so the panel driver powers the panel
+# and its supplies down, as stock does.
+vendor.hwc.s6kms.crtc_off=1
+ro.opengles.version=196609
+
+# Keystore
+ro.hardware.keystore=mdfpp
+
+# Ril
+ro.debug_level=0x494d
+telephony.lteOnCdmaDevice=0
+vendor.sec.rild.libpath=/vendor/lib64/libsec-ril.so
+vendor.sec.rild.libpath2=/vendor/lib64/libsec-ril-dsds.so
+
+# SoC
+ro.soc.manufacturer=Samsung
+ro.soc.model=Exynos 7420
+
+# WiFi
+wifi.direct.interface=p2p-dev-wlan0
+
+# USB / ADB default
+persist.sys.usb.config=adb
+ro.zygote.disable_gl_preload=true

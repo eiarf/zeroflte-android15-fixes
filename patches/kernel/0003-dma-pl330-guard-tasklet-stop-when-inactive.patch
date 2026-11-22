@@ -1,0 +1,30 @@
+From: zeroflte-rising17 <eiarf@users.noreply.github.com>
+Subject: [PATCH] dma: pl330: guard _stop() in tasklet when channel is already inactive
+
+Prevents synchronous external abort (readl on clock-gated DMAC) and
+unbalanced pm_runtime_put_autosuspend() when pl330_tasklet runs after
+pl330_terminate_all() already stopped the thread and suspended the DMAC.
+---
+diff --git a/drivers/dma/pl330.c b/drivers/dma/pl330.c
+index 3cf0b3838..60844a400 100644
+--- a/drivers/dma/pl330.c
++++ b/drivers/dma/pl330.c
+@@ -2087,11 +2087,13 @@ static void pl330_tasklet(struct tasklet_struct *t)
+ 	fill_queue(pch);
+ 
+ 	if (list_empty(&pch->work_list)) {
+-		spin_lock(&pch->thread->dmac->lock);
+-		_stop(pch->thread);
+-		spin_unlock(&pch->thread->dmac->lock);
+-		power_down = true;
+-		pch->active = false;
++		if (pch->active) {
++			spin_lock(&pch->thread->dmac->lock);
++			_stop(pch->thread);
++			spin_unlock(&pch->thread->dmac->lock);
++			power_down = true;
++			pch->active = false;
++		}
+ 	} else {
+ 		/* Make sure the PL330 Channel thread is active */
+ 		spin_lock(&pch->thread->dmac->lock);

@@ -1,0 +1,21 @@
+# Android fstab file.
+# The filesystem that contains the filesystem checker binary (typically /system) cannot
+# specify MF_CHECK, and must come before any filesystems that do specify MF_CHECK
+# data partition must be located at the bottom for supporting device encryption
+#
+
+/dev/block/platform/15570000.ufs/by-name/BOOT             /boot       emmc      defaults                                                                                                       defaults
+/dev/block/platform/15570000.ufs/by-name/RECOVERY         /recovery   emmc      defaults                                                                                                       defaults
+/dev/block/platform/15570000.ufs/by-name/SYSTEM           /system     ext4      ro,errors=panic,noload                                                                                         wait,first_stage_mount
+/dev/block/platform/15570000.ufs/by-name/EFS              /efs        ext4      noatime,nosuid,nodev,noauto_da_alloc,discard,journal_async_commit,data=ordered,errors=panic    wait,check,first_stage_mount
+/dev/block/platform/15570000.ufs/by-name/CACHE            /metadata   ext4      noatime,nosuid,nodev,discard                                                                                   wait,check,formattable,first_stage_mount
+/dev/block/platform/15570000.ufs/by-name/USERDATA         /data       f2fs      rw,nosuid,nodev,noatime,nodiratime,inline_xattr                                                                wait,check,latemount,reservedsize=128M
+/dev/block/platform/15570000.ufs/by-name/USERDATA         /data       ext4      noatime,nosuid,nodev,noauto_da_alloc,discard,journal_async_commit,data=ordered,errors=panic                    wait,check,latemount,reservedsize=128M
+/dev/block/platform/15570000.ufs/by-name/OTA              /misc       emmc      defaults                                                                                                       defaults
+
+# VOLD
+/dev/block/platform/15570000.ufs/by-name/HIDDEN           /preload    ext4      defaults                                                                                                       voldmanaged=preload:auto
+/devices/platform/soc@0/15400000.usb/15400000.usb/xhci-hcd.*.auto/usb*  auto        auto      defaults                                                                                                       voldmanaged=usb:auto
+
+# ZRAM
+/dev/block/zram0                                          none        swap      defaults,discard                                                                                               zramsize=2147483648
