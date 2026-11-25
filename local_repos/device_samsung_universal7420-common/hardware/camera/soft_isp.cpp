@@ -187,9 +187,12 @@ WbCcmQ10 buildWbCcm(const AeAwbResult& gains) {
     wc.rGainQ8 = static_cast<int32_t>(std::lround(gains.rGain * scale));
     wc.gGainQ8 = static_cast<int32_t>(std::lround(gains.gGain * scale));
     wc.bGainQ8 = static_cast<int32_t>(std::lround(gains.bGain * scale));
+    const float isoDesat = std::clamp((gains.swDgain - 1.0f) * 0.25f, 0.0f, 0.50f);
     for (int r = 0; r < 3; ++r) {
         for (int c = 0; c < 3; ++c) {
-            wc.ccm[r * 3 + c] = static_cast<int32_t>(std::lround(kCcm[r][c] * 1024.0f));
+            const float ident = (r == c) ? 1.0f : 0.0f;
+            const float val = kCcm[r][c] * (1.0f - isoDesat) + ident * isoDesat;
+            wc.ccm[r * 3 + c] = static_cast<int32_t>(std::lround(val * 1024.0f));
         }
     }
     return wc;
@@ -405,7 +408,7 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
             ratio = fastConvergence ? std::clamp(ratio, 0.03, 4.0) : std::clamp(ratio, 0.5, 2.0);
             const double damp = fastConvergence ? 1.00 : 0.30;
             double dampedRatio = 1.0 + damp * (ratio - 1.0);
-            const int32_t totalDgainMax = 2048;  // <= 8.0x combined HW+SW digital gain
+            const int32_t totalDgainMax = 768;   // <= 3.0x combined HW+SW digital gain
             const int32_t hwDgainMax = std::clamp(totalDgainMax, limits_.dgainMin, limits_.dgainMax);
             double maxEv = static_cast<double>(limits_.expoMax) *
                            (limits_.againMax / 32.0) * (totalDgainMax / 256.0);
@@ -596,6 +599,35 @@ bool SoftIsp::processOutput(const uint16_t* raw, int32_t rawW, int32_t rawH, int
                      wc, dst);
 }
 
+void chromaNrPtrRow(int32_t n, uint8_t* cb, uint8_t* cr, size_t step) {
+    if (n < 5) return;
+    std::vector<uint8_t> cbCopy(static_cast<size_t>(n));
+    std::vector<uint8_t> crCopy(static_cast<size_t>(n));
+    for (int32_t i = 0; i < n; ++i) {
+        cbCopy[i] = cb[static_cast<size_t>(i) * step];
+        crCopy[i] = cr[static_cast<size_t>(i) * step];
+    }
+    constexpr int32_t kEdgeThresh = 24;
+    for (int32_t i = 2; i < n - 2; ++i) {
+        const int cCb = cbCopy[i];
+        const int cCr = crCopy[i];
+        int sumCb = cCb * 2, sumCr = cCr * 2, wSum = 2;
+        for (int k = -2; k <= 2; ++k) {
+            if (k == 0) continue;
+            const int nCb = cbCopy[i + k];
+            const int nCr = crCopy[i + k];
+            if (std::abs(nCb - cCb) + std::abs(nCr - cCr) <= kEdgeThresh) {
+                const int w = (std::abs(k) == 1) ? 2 : 1;
+                sumCb += nCb * w;
+                sumCr += nCr * w;
+                wSum += w;
+            }
+        }
+        cb[static_cast<size_t>(i) * step] = static_cast<uint8_t>(sumCb / wSum);
+        cr[static_cast<size_t>(i) * step] = static_cast<uint8_t>(sumCr / wSum);
+    }
+}
+
 bool SoftIsp::writeRgba(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                         BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
                         const WbCcmQ10& wc, const LockedOutput& dst) {
@@ -709,6 +741,7 @@ bool SoftIsp::writeYuv(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t 
                 cbRow[px * cStep] = clampU8(cb);
                 crRow[px * cStep] = clampU8(cr);
             }
+            chromaNrPtrRow(halfW, cbRow, crRow, cStep);
         }
     });
     return true;

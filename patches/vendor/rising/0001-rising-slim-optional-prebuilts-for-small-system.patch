@@ -1,0 +1,47 @@
+diff --git a/config/packages.mk b/config/packages.mk
+index d59cd9b..59ef305 100644
+--- a/config/packages.mk
++++ b/config/packages.mk
+@@ -8,17 +8,21 @@ PRODUCT_PACKAGES += \
+ 
+ PRODUCT_PACKAGES += \
+     BatteryStatsViewer \
+-    OmniStyle \
+-    OmniJaws \
+     Updater \
+     GameSpace \
+     LMOFreeform \
+     LMOFreeformSidebar \
+-    AxQuickLook \
+     AxSandbox \
+     AppDataBackup \
+     LunarisLockStyles
+ 
++ifneq ($(TARGET_SLIM_SYSTEM_EXT),true)
++PRODUCT_PACKAGES += \
++    OmniStyle \
++    OmniJaws \
++    AxQuickLook
++endif
++
+ ifneq ($(WITH_GMS),true)
+ PRODUCT_PACKAGES += \
+     LatinIME
+diff --git a/prebuilts/prebuilts.mk b/prebuilts/prebuilts.mk
+index 5f66683..a034060 100644
+--- a/prebuilts/prebuilts.mk
++++ b/prebuilts/prebuilts.mk
+@@ -67,8 +67,12 @@ endif
+ endif
+ 
+ PRODUCT_COPY_FILES += \
+-    vendor/rising/prebuilts/bootanimation/bootanimation_rising.zip:$(TARGET_COPY_OUT_PRODUCT)/media/bootanimation_rising.zip \
++    vendor/rising/prebuilts/bootanimation/bootanimation_rising.zip:$(TARGET_COPY_OUT_PRODUCT)/media/bootanimation_rising.zip
++
++ifneq ($(TARGET_SLIM_SYSTEM_EXT),true)
++PRODUCT_COPY_FILES += \
+     vendor/rising/prebuilts/bootanimation/bootanimation_cyberpunk.zip:$(TARGET_COPY_OUT_PRODUCT)/media/bootanimation_cyberpunk.zip \
+     vendor/rising/prebuilts/bootanimation/bootanimation_valorant.zip:$(TARGET_COPY_OUT_PRODUCT)/media/bootanimation_valorant.zip \
+     vendor/rising/prebuilts/bootanimation/bootanimation_google.zip:$(TARGET_COPY_OUT_PRODUCT)/media/bootanimation_google.zip \
+     vendor/rising/prebuilts/bootanimation/bootanimation_google_monet.zip:$(TARGET_COPY_OUT_PRODUCT)/media/bootanimation_google_monet.zip
++endif

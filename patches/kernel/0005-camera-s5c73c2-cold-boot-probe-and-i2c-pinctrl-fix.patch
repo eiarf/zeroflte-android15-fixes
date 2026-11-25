@@ -1,0 +1,137 @@
+diff --git a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+index 3a3a4441e..3575302f6 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
++++ b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+@@ -2719,6 +2719,16 @@ cam_mclk2_on: cam-mclk2-on-pins {
+ 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+ 	};
+ 
++	cam_i2c0_pins: cam-i2c0-pins {
++		samsung,pins = "gpc2-0", "gpc2-1";
++		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
++	};
++
++	cam_i2c1_pins: cam-i2c1-pins {
++		samsung,pins = "gpc2-2", "gpc2-3";
++		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
++	};
++
+ 	cam_i2c2_pins: cam-i2c2-pins {
+ 		samsung,pins = "gpc2-4", "gpc2-5";
+ 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+@@ -2743,6 +2753,8 @@ cam_i2c0: i2c-cam0 {
+ 		sda-gpios = <&gpc2 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+ 		scl-gpios = <&gpc2 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+ 		i2c-gpio,delay-us = <2>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_i2c0_pins>;
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 	};
+@@ -2752,6 +2764,8 @@ cam_i2c1: i2c-cam1 {
+ 		sda-gpios = <&gpc2 2 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+ 		scl-gpios = <&gpc2 3 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+ 		i2c-gpio,delay-us = <2>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_i2c1_pins>;
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 	};
+diff --git a/drivers/media/i2c/s5c73c2.c b/drivers/media/i2c/s5c73c2.c
+index 161614242..4a32d84e1 100644
+--- a/drivers/media/i2c/s5c73c2.c
++++ b/drivers/media/i2c/s5c73c2.c
+@@ -503,7 +503,7 @@ static int s5c73c2_power_on(struct s5c73c2 *c2)
+ 		if (s->delay_us)
+ 			usleep_range(s->delay_us, s->delay_us + 100);
+ 	}
+-	usleep_range(1000, 1100);
++	usleep_range(2000, 3000);
+ 
+ 	ret = clk_set_rate(c2->mclk, 24000000);
+ 	ret = ret ?: clk_prepare_enable(c2->mclk);
+@@ -516,12 +516,12 @@ static int s5c73c2_power_on(struct s5c73c2 *c2)
+ 	ret = pinctrl_select_state(c2->pinctrl, c2->pins_on);
+ 	if (ret)
+ 		goto err_sensor_mclk;
+-	usleep_range(2000, 2100);
++	usleep_range(2000, 3000);
+ 
+ 	gpiod_set_value_cansleep(c2->reset, 0);
+-	usleep_range(300, 400);
++	usleep_range(500, 600);
+ 	gpiod_set_value_cansleep(c2->sensor_reset, 0);
+-	usleep_range(2000, 2100);
++	usleep_range(8000, 10000);
+ 	return 0;
+ 
+ err_sensor_mclk:
+@@ -779,6 +779,31 @@ static int s5c73c2_get_spi(struct s5c73c2 *c2)
+ 	return 0;
+ }
+ 
++static int s5c73c2_power_on_and_boot(struct s5c73c2 *c2)
++{
++	int attempt, ret = -ENXIO;
++
++	for (attempt = 0; attempt < 3; attempt++) {
++		ret = s5c73c2_power_on(c2);
++		if (ret)
++			return ret;
++
++		ret = s5c73c2_identify_and_boot(c2);
++		if (!ret)
++			return 0;
++
++		dev_warn(c2->dev,
++			 "boot attempt %d/3 failed (%d), recovering I2C bus\n",
++			 attempt + 1, ret);
++		s5c73c2_power_off(c2, ARRAY_SIZE(s5c73c2_supplies));
++		if (c2->client && c2->client->adapter)
++			i2c_recover_bus(c2->client->adapter);
++		msleep(50);
++	}
++
++	return ret;
++}
++
+ static int s5c73c2_probe(struct i2c_client *client)
+ {
+ 	struct device *dev = &client->dev;
+@@ -841,14 +866,10 @@ static int s5c73c2_probe(struct i2c_client *client)
+ 	c2->info = &s5c73c2_imx240_info;
+ 	c2->mode = &c2->info->modes[0];
+ 
+-	ret = s5c73c2_power_on(c2);
++	ret = s5c73c2_power_on_and_boot(c2);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = s5c73c2_identify_and_boot(c2);
+-	if (ret)
+-		goto err_power;
+-
+ 	s5c73c2_detect_sensor(c2);
+ 	c2->mode = &c2->info->modes[0];
+ 
+@@ -1764,19 +1785,7 @@ static int s5c73c2_runtime_resume(struct device *dev)
+ {
+ 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+ 	struct s5c73c2 *c2 = to_s5c73c2(sd);
+-	int ret;
+-
+-	ret = s5c73c2_power_on(c2);
+-	if (ret)
+-		return ret;
+-
+-	ret = s5c73c2_identify_and_boot(c2);
+-	if (ret) {
+-		s5c73c2_power_off(c2, ARRAY_SIZE(s5c73c2_supplies));
+-		return ret;
+-	}
+-
+-	return 0;
++	return s5c73c2_power_on_and_boot(c2);
+ }
+ 
+ static void s5c73c2_remove(struct i2c_client *client)

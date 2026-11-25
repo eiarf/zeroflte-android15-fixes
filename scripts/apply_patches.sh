@@ -61,4 +61,8 @@ if [[ -d "$ROM_DIR/vendor/addons" ]]; then
     apply_patch "vendor/addons"                       "$PATCH_ROOT/vendor/addons/0001-addons-drop-optional-heavy-emoji-fonts-for-small-system.patch"
 fi
 
+if [[ -d "$ROM_DIR/vendor/rising" ]]; then
+    apply_patch "vendor/rising"                       "$PATCH_ROOT/vendor/rising/0001-rising-slim-optional-prebuilts-for-small-system.patch"
+fi
+
 echo "=== All platform patches verified and applied ==="

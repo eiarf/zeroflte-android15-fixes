@@ -1,0 +1,25 @@
+diff --git a/drivers/soc/samsung/exynos7-pm.c b/drivers/soc/samsung/exynos7-pm.c
+index 00b21bb28..0499d600e 100644
+--- a/drivers/soc/samsung/exynos7-pm.c
++++ b/drivers/soc/samsung/exynos7-pm.c
+@@ -389,7 +389,7 @@ static void exynos7_pm_wake(void)
+  * If the SoC never powers down, it resets by itself (RST_STAT bit 23); if
+  * the power-down completes, the watchdog stops with the TOP domain.
+  */
+-static bool sleep_watchdog = true;
++static bool sleep_watchdog = false;
+ module_param(sleep_watchdog, bool, 0644);
+ 
+ /*
+diff --git a/drivers/watchdog/s3c2410_wdt.c b/drivers/watchdog/s3c2410_wdt.c
+index 4dd51479a..08e9facf2 100644
+--- a/drivers/watchdog/s3c2410_wdt.c
++++ b/drivers/watchdog/s3c2410_wdt.c
+@@ -765,6 +765,7 @@ static int s3c2410wdt_suspend(struct device *dev)
+ 
+ 	/* Note that WTCNT doesn't need to be saved. */
+ 	s3c2410wdt_stop(&wdt->wdt_device);
++	writel(0, wdt->reg_base + S3C2410_WTCON);
+ 
+ 	return s3c2410wdt_enable(wdt, false);
+ }

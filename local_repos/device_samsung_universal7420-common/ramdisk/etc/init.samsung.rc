@@ -527,3 +527,13 @@ on charger
 # HWC data
 on property:sys.boot_completed=1
     mkdir /data/vendor/log/hwc 0771 system graphics
+
+# Deep Sleep Fix (s2idle) for Linux 6.6 Exynos7420
+on early-init
+    write /sys/power/mem_sleep s2idle
+
+on boot
+    write /sys/power/mem_sleep s2idle
+
+on property:sys.boot_completed=1
+    write /sys/power/mem_sleep s2idle
