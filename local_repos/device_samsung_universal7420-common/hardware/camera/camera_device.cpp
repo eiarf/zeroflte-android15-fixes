@@ -110,7 +110,7 @@ AidlCameraDeviceSession::AidlCameraDeviceSession(const V4l2DeviceNodes& nodes,
       callback_(std::move(callback)),
       onCloseCb_(std::move(onCloseCb)),
       pipeline_(nodes),
-      aeAwb_(nodes.pattern) {}
+      aeAwb_(nodes.pattern, nodes.isFront) {}
 
 AidlCameraDeviceSession::~AidlCameraDeviceSession() {
     close();
@@ -545,17 +545,55 @@ void AidlCameraDeviceSession::processSingleRequest(const QueuedReq& req, bool /*
         }
     }
 
+    if (switchedToFull && af_.enabled && af_.scanning) {
+        const bool moved = (af_.curPos != af_.bestPos);
+        pipeline_.setFocusPos(af_.bestPos);
+        af_.curPos = af_.bestPos;
+        af_.scanning = false;
+        af_.moving = false;
+        af_.locked = af_.activeTrigger;
+        af_.afState = af_.activeTrigger ? ANDROID_CONTROL_AF_STATE_FOCUSED_LOCKED
+                                        : ANDROID_CONTROL_AF_STATE_PASSIVE_FOCUSED;
+        if (moved) {
+            usleep(65000);
+        }
+    }
+
+    AeAwbResult fullCaptureAe = hasFlashAe ? flashAeRes : aeAwb_.current();
     if (switchedToFull) {
-        // Carry over current (or flash-adapted) AE gain/exposure into 16MP (REQBUFS=3 fits 160MB cam_cma)
-        AeAwbResult prevAe = hasFlashAe ? flashAeRes : aeAwb_.current();
+        // Carry over AE gain/exposure into 16MP, compensating for rear mode-0 1.70x sensitivity & 1.12x B/G
+        AeAwbResult prevAe = fullCaptureAe;
         if (pipeline_.startStream(nodes_.fullWidth, nodes_.fullHeight, 3)) {
             SensorCtrlLimits fullLim = pipeline_.querySensorLimits();
-            int32_t scaledExpo = static_cast<int32_t>(
-                std::llround(prevAe.appliedExposureNs / std::max(1.0, fullLim.lineDurationNs)));
-            pipeline_.applyExposureGain(
-                std::clamp(scaledExpo, fullLim.expoMin, fullLim.expoMax),
-                std::clamp(prevAe.analogGain, fullLim.againMin, fullLim.againMax),
-                std::clamp(prevAe.digitalGain, fullLim.dgainMin, fullLim.dgainMax));
+            double prevLines = prevAe.appliedExposureNs / std::max(1.0, fullLim.lineDurationNs);
+            double prevEv = std::max(1.0, prevLines) * (prevAe.analogGain / 32.0) *
+                            (prevAe.digitalGain / 256.0) * std::clamp<double>(prevAe.swDgain, 1.0, 8.0);
+            double fullEv = (nodes_.isFront || hasFlashAe) ? prevEv : (prevEv / 1.70);
+            double lines = std::clamp(fullEv, static_cast<double>(fullLim.expoMin),
+                                      static_cast<double>(fullLim.expoMax));
+            double rem = fullEv / std::max(1.0, lines);
+            double againF = std::clamp(rem * 32.0, static_cast<double>(fullLim.againMin),
+                                       static_cast<double>(fullLim.againMax));
+            double dgainCap = std::clamp<double>(768.0, fullLim.dgainMin, fullLim.dgainMax);
+            double dgainF = std::clamp((fullEv / std::max(1.0, lines * (againF / 32.0))) * 256.0,
+                                       static_cast<double>(fullLim.dgainMin), dgainCap);
+            int32_t fullExpo = static_cast<int32_t>(std::lround(lines));
+            int32_t fullAgain = static_cast<int32_t>(std::lround(againF));
+            int32_t fullDgain = static_cast<int32_t>(std::lround(dgainF));
+            float fullSwDgain = static_cast<float>(std::clamp(
+                fullEv / std::max(1.0, fullExpo * (fullAgain / 32.0) * (fullDgain / 256.0)), 1.0, 4.0));
+            pipeline_.applyExposureGain(fullExpo, fullAgain, fullDgain);
+            fullCaptureAe.exposureLines = fullExpo;
+            fullCaptureAe.analogGain = fullAgain;
+            fullCaptureAe.digitalGain = fullDgain;
+            fullCaptureAe.swDgain = fullSwDgain;
+            fullCaptureAe.appliedExposureNs = static_cast<int64_t>(fullExpo * fullLim.lineDurationNs);
+            double isoMult = (fullAgain / std::max(1.0, static_cast<double>(fullLim.againMin))) *
+                             (fullDgain / 256.0) * fullSwDgain;
+            fullCaptureAe.appliedSensitivity = static_cast<int32_t>(std::llround(isoMult * 100.0));
+            if (!nodes_.isFront && !hasFlashAe) {
+                fullCaptureAe.bGain = std::clamp(fullCaptureAe.bGain * 0.90f, 0.70f, 6.50f);
+            }
             // Discard 3 transition frames so new exposure & PLL latch cleanly
             RawFrameView skip{};
             for (int k = 0; k < 3; ++k) {
@@ -617,9 +655,16 @@ void AidlCameraDeviceSession::processSingleRequest(const QueuedReq& req, bool /*
 
     AeAwbResult aeRes = hasFlashAe ? flashAeRes : aeAwb_.current();
     if (gotFrame && !switchedToFull) {
+        const AeAwbResult prevAe = aeAwb_.current();
+        const bool allowFreezeAe =
+            af_.scanning && (prevAe.aeState == ANDROID_CONTROL_AE_STATE_CONVERGED) &&
+            (af_.frameCounter >= 12);
         aeRes = aeAwb_.updateFromRaw(cachedFrame.data, cachedFrame.width, cachedFrame.height,
-                                     cachedFrame.strideBytes, params);
-        pipeline_.applyExposureGain(aeRes.exposureLines, aeRes.analogGain, aeRes.digitalGain);
+                                     cachedFrame.strideBytes, params, !allowFreezeAe && (af_.frameCounter < 10),
+                                     allowFreezeAe);
+        if (!allowFreezeAe) {
+            pipeline_.applyExposureGain(aeRes.exposureLines, aeRes.analogGain, aeRes.digitalGain);
+        }
         stepAutofocus(params, cachedFrame);
     }
 
@@ -648,9 +693,10 @@ void AidlCameraDeviceSession::processSingleRequest(const QueuedReq& req, bool /*
         if (gotFrame && qb.handle && st.id >= 0 &&
             gralloc_.lockForWrite(qb.handle, st.width, st.height, st.format, &lo)) {
             int32_t blobBytes = 0;
+            const AeAwbResult& outAe = switchedToFull ? fullCaptureAe : aeRes;
             bool ok = isp_.processOutput(cachedFrame.data, cachedFrame.width, cachedFrame.height,
                                          cachedFrame.strideBytes, staticCfg_.activeWidth,
-                                         staticCfg_.activeHeight, nodes_.pattern, aeRes, params,
+                                         staticCfg_.activeHeight, nodes_.pattern, outAe, params,
                                          lo, &blobBytes);
             gralloc_.unlock(qb.handle);
             if (ok) sb.status = BufferStatus::OK;
@@ -788,6 +834,14 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
         return;
     }
 
+    const bool wasTriggerMode = (af_.prevAfMode == ANDROID_CONTROL_AF_MODE_AUTO ||
+                                 af_.prevAfMode == ANDROID_CONTROL_AF_MODE_MACRO);
+    if (af_.locked && wasTriggerMode && isCaf && !p.hasAfRegion) {
+        af_.locked = false;
+        af_.activeTrigger = false;
+    }
+    af_.prevAfMode = p.afMode;
+
     if (p.afTrigger == ANDROID_CONTROL_AF_TRIGGER_CANCEL &&
         af_.prevTrigger != ANDROID_CONTROL_AF_TRIGGER_CANCEL) {
         af_.scanning = false;
@@ -801,10 +855,11 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
     }
 
     auto moveLensTo = [&](int32_t pos) {
+        af_.lastMoveDelta = std::abs(pos - af_.curPos);
         pipeline_.setFocusPos(pos);
         af_.curPos = pos;
         af_.pendingPos = pos;
-        af_.settleHold = 2;
+        af_.settleHold = (af_.lastMoveDelta > 160) ? 2 : 1;
         af_.moveCmdNs = monotonicNowNs();
         af_.waitFrames = 0;
         af_.moving = true;
@@ -815,21 +870,25 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
         af_.activeTrigger = activeTrig;
         af_.locked = false;
         af_.finePass = false;
+        af_.fineExtended = false;
+        af_.fineDir = 0;
         af_.bestScore = -1.0;
         af_.bestPos = af_.curPos;
         af_.scanIdx = 0;
         af_.sceneShiftCount = 0;
         static constexpr int kCoarse[9] = {20, 75, 130, 185, 240, 295, 355, 420, 485};
         af_.candidates.clear();
-        for (int pos : kCoarse) {
+        const bool reverse = (af_.curPos >= 255);
+        for (int idx = 0; idx < 9; ++idx) {
+            int pos = kCoarse[reverse ? (8 - idx) : idx];
             int32_t clamped = std::clamp(pos, af_.lensMin, af_.lensMax);
             if (af_.candidates.empty() || af_.candidates.back() != clamped) {
                 af_.candidates.push_back(clamped);
             }
         }
-        ALOGI("Camera %d AF sweep start (active=%d, roi=%d [%d,%d %dx%d])",
-              nodes_.cameraId, activeTrig ? 1 : 0, p.hasAfRegion ? 1 : 0,
-              p.afX, p.afY, p.afW, p.afH);
+        ALOGI("Camera %d AF sweep start (active=%d, cur=%d, dir=%s, roi=%d [%d,%d %dx%d])",
+              nodes_.cameraId, activeTrig ? 1 : 0, af_.curPos, reverse ? "down" : "up",
+              p.hasAfRegion ? 1 : 0, p.afX, p.afY, p.afW, p.afH);
         moveLensTo(af_.candidates[0]);
         af_.afState = activeTrig ? ANDROID_CONTROL_AF_STATE_ACTIVE_SCAN
                                  : ANDROID_CONTROL_AF_STATE_PASSIVE_SCAN;
@@ -854,30 +913,38 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
                                  af_.prevTrigger != ANDROID_CONTROL_AF_TRIGGER_START);
     af_.prevTrigger = p.afTrigger;
 
+    const double score = computeFocusSharpness(
+        frame.data, frame.width, frame.height, frame.strideBytes,
+        staticCfg_.activeWidth, staticCfg_.activeHeight, nodes_.pattern, p);
+
     if (triggerStarted && (isTriggerMode || isCaf)) {
-        if (af_.scanning && !af_.activeTrigger && !afRegionMoved) {
+        const int64_t nowNs = monotonicNowNs();
+        const bool stableConverge =
+            (af_.lastConvergeNs > 0 && (nowNs - af_.lastConvergeNs) < 15000000000LL &&
+             af_.sceneShiftCount == 0 && af_.refScore > 0.0 &&
+             score >= af_.refScore * 0.72 && score <= af_.refScore * 1.45);
+        if (!afRegionMoved && !af_.scanning && af_.initSweepDone && (af_.locked || stableConverge)) {
+            af_.locked = true;
             af_.activeTrigger = true;
-            af_.afState = ANDROID_CONTROL_AF_STATE_ACTIVE_SCAN;
+            af_.afState = ANDROID_CONTROL_AF_STATE_FOCUSED_LOCKED;
+            ALOGI("Camera %d AF trigger kept sharp pos=%d (score=%.4f ref=%.4f)",
+                  nodes_.cameraId, af_.bestPos, score, af_.refScore);
             return;
         }
         startSweep(true);
         return;
     }
 
-    if (afRegionMoved && (isCaf || isTriggerMode) && !af_.scanning) {
-        startSweep(p.afTrigger == ANDROID_CONTROL_AF_TRIGGER_START);
+    if (afRegionMoved && (isCaf || isTriggerMode)) {
+        startSweep(af_.activeTrigger || (p.afTrigger == ANDROID_CONTROL_AF_TRIGGER_START));
         return;
     }
 
-    if (!af_.scanning && isCaf && !af_.locked && !af_.initSweepDone && af_.frameCounter >= 10) {
+    if (!af_.scanning && isCaf && !af_.locked && !af_.initSweepDone && (af_.frameCounter >= 20 || (af_.frameCounter >= 10 && aeAwb_.current().aeState == ANDROID_CONTROL_AE_STATE_CONVERGED))) {
         af_.initSweepDone = true;
         startSweep(false);
         return;
     }
-
-    const double score = computeFocusSharpness(
-        frame.data, frame.width, frame.height, frame.strideBytes,
-        staticCfg_.activeWidth, staticCfg_.activeHeight, nodes_.pattern, p);
 
     if (af_.scanning) {
         ++af_.waitFrames;
@@ -885,9 +952,13 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
             --af_.settleHold;
             return;
         }
-        // Ensure V4L2 3-buffer pipeline + ak7345 VCM slew (up to ~35ms) have settled into this exposure
+        if (af_.scanIdx == 0 && !af_.finePass &&
+            aeAwb_.current().aeState != ANDROID_CONTROL_AE_STATE_CONVERGED && af_.waitFrames < 8) {
+            return;
+        }
+        const int64_t reqSettleNs = (af_.lastMoveDelta > 160) ? 105000000LL : 65000000LL;
         if (frame.timestampNs > 0 && af_.moveCmdNs > 0 &&
-            frame.timestampNs < af_.moveCmdNs + 75000000LL && af_.waitFrames < 4) {
+            frame.timestampNs < af_.moveCmdNs + reqSettleNs && af_.waitFrames < 3) {
             return;
         }
         ALOGI("Camera %d AF step%s pos=%d score=%.4f",
@@ -895,9 +966,13 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
         if (score > af_.bestScore) {
             af_.bestScore = score;
             af_.bestPos = af_.pendingPos;
+            af_.fineDir = 0;
+        } else if (!af_.finePass && af_.bestScore >= 0.25 && score < af_.bestScore * 0.72) {
+            ++af_.fineDir;  // count monotonic post-peak drops for early coarse termination
         }
         ++af_.scanIdx;
-        if (af_.scanIdx < af_.candidates.size()) {
+        const bool earlyPeakFound = (!af_.finePass && af_.scanIdx >= 4 && af_.fineDir >= 2);
+        if (!earlyPeakFound && af_.scanIdx < af_.candidates.size()) {
             moveLensTo(af_.candidates[af_.scanIdx]);
             af_.afState = af_.activeTrigger ? ANDROID_CONTROL_AF_STATE_ACTIVE_SCAN
                                             : ANDROID_CONTROL_AF_STATE_PASSIVE_SCAN;
@@ -905,10 +980,14 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
         }
         if (!af_.finePass) {
             af_.finePass = true;
-            static constexpr int kFineOffsets[5] = {-36, -18, 0, 18, 36};
+            af_.fineDir = 0;
+            static constexpr int kFineOffsets[5] = {-28, -14, 0, 14, 28};
             af_.candidates.clear();
-            for (int off : kFineOffsets) {
-                int32_t pos = std::clamp(af_.bestPos + off, af_.lensMin, af_.lensMax);
+            const int32_t anchor = af_.bestPos;
+            const bool revFine = (af_.curPos > anchor);
+            for (int i = 0; i < 5; ++i) {
+                int off = kFineOffsets[revFine ? (4 - i) : i];
+                int32_t pos = std::clamp(anchor + off, af_.lensMin, af_.lensMax);
                 if (af_.candidates.empty() || af_.candidates.back() != pos) {
                     af_.candidates.push_back(pos);
                 }
@@ -921,6 +1000,32 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
             return;
         }
 
+        if (!af_.fineExtended && af_.candidates.size() >= 3) {
+            int32_t step = 0;
+            if (af_.bestPos == af_.candidates.front() && af_.bestPos > af_.lensMin &&
+                af_.bestPos < af_.lensMax) {
+                step = (af_.candidates.front() < af_.candidates.back()) ? -14 : 14;
+            } else if (af_.bestPos == af_.candidates.back() && af_.bestPos > af_.lensMin &&
+                       af_.bestPos < af_.lensMax) {
+                step = (af_.candidates.back() > af_.candidates.front()) ? 14 : -14;
+            }
+            if (step != 0) {
+                af_.fineExtended = true;
+                int32_t next1 = std::clamp(af_.bestPos + step, af_.lensMin, af_.lensMax);
+                int32_t next2 = std::clamp(af_.bestPos + 2 * step, af_.lensMin, af_.lensMax);
+                if (next1 != af_.bestPos) {
+                    af_.candidates.clear();
+                    af_.candidates.push_back(next1);
+                    if (next2 != next1) af_.candidates.push_back(next2);
+                    af_.scanIdx = 0;
+                    moveLensTo(af_.candidates[0]);
+                    af_.afState = af_.activeTrigger ? ANDROID_CONTROL_AF_STATE_ACTIVE_SCAN
+                                                    : ANDROID_CONTROL_AF_STATE_PASSIVE_SCAN;
+                    return;
+                }
+            }
+        }
+
         // Peak found; move lens cleanly to best position and lock/converge
         pipeline_.setFocusPos(af_.bestPos);
         af_.curPos = af_.bestPos;
@@ -930,6 +1035,7 @@ void AidlCameraDeviceSession::stepAutofocus(const IspRequestParams& p, const Raw
         af_.refScore = std::max(af_.bestScore, 1e-6);
         af_.postLockSettle = 3;
         af_.sceneShiftCount = 0;
+        af_.lastConvergeNs = monotonicNowNs();
         af_.locked = af_.activeTrigger;
         af_.afState = af_.activeTrigger ? ANDROID_CONTROL_AF_STATE_FOCUSED_LOCKED
                                         : ANDROID_CONTROL_AF_STATE_PASSIVE_FOCUSED;
@@ -980,6 +1086,13 @@ AidlCameraMetadata AidlCameraDeviceSession::buildResultMetadata(const IspRequest
     b.addU8(ANDROID_CONTROL_AF_MODE, staticCfg_.hasAutofocus ? p.afMode : ANDROID_CONTROL_AF_MODE_OFF);
     b.addU8(ANDROID_CONTROL_AF_STATE, staticCfg_.hasAutofocus ? af_.afState : ANDROID_CONTROL_AF_STATE_INACTIVE);
     b.addU8(ANDROID_CONTROL_AF_TRIGGER, ANDROID_CONTROL_AF_TRIGGER_IDLE);
+    if (staticCfg_.hasAutofocus && p.hasAfRegion) {
+        const int32_t afRegOut[5] = {p.afX, p.afY, p.afX + p.afW, p.afY + p.afH, 1000};
+        b.add(ANDROID_CONTROL_AF_REGIONS, afRegOut, 5);
+    } else {
+        const int32_t zeroReg[5] = {0, 0, 0, 0, 0};
+        b.add(ANDROID_CONTROL_AF_REGIONS, zeroReg, 5);
+    }
     b.addU8(ANDROID_CONTROL_AWB_LOCK,
             p.awbLock ? ANDROID_CONTROL_AWB_LOCK_ON : ANDROID_CONTROL_AWB_LOCK_OFF);
     b.addU8(ANDROID_CONTROL_AWB_MODE, p.awbMode);

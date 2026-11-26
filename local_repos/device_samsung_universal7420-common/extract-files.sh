@@ -71,6 +71,11 @@ extract "${MY_DIR}/proprietary-files.txt" "${SRC}" "${KANG}" --section "${SECTIO
 BLOB_ROOT="$ANDROID_ROOT"/vendor/"$VENDOR"/"$DEVICE_COMMON"/proprietary
 
 "${PATCHELF}" --replace-needed libgui.so libsensor-mod.so $BLOB_ROOT/vendor/bin/hw/gpsd
+"${PATCHELF}" --remove-needed libgui.so $BLOB_ROOT/vendor/lib/libwrappergps.so
+"${PATCHELF}" --remove-needed libgui.so $BLOB_ROOT/vendor/lib64/libwrappergps.so
+"${PATCHELF}" --add-needed sensor_shim.so $BLOB_ROOT/vendor/lib64/libsensor-mod.so
+"${PATCHELF}" --add-needed libbauthtzcommon_shim.so $BLOB_ROOT/vendor/lib/libbauthserver.so
+"${PATCHELF}" --add-needed libbauthtzcommon_shim.so $BLOB_ROOT/vendor/lib64/libbauthserver.so
 
 "${PATCHELF}" --remove-needed vendor.samsung.hardware.nfc@1.0.so $BLOB_ROOT/vendor/lib/hw/nfc_nci.default.so
 "${PATCHELF}" --remove-needed vendor.samsung.hardware.nfc@1.0.so $BLOB_ROOT/vendor/lib64/hw/nfc_nci.default.so

@@ -19,6 +19,7 @@ struct LockedOutput {
     int32_t height = 0;
     int32_t stride = 0;
     int32_t bufferSize = 0;
+    int32_t blobSize = 0;
     int32_t format = 0;
     void* vaddr = nullptr;
     android_ycbcr ycbcr{};

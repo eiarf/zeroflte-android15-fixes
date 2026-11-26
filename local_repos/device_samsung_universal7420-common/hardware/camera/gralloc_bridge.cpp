@@ -279,6 +279,9 @@ bool GrallocBridge::lockForWrite(native_handle_t* hnd, int32_t width, int32_t he
             }
         }
     }
+    if (format == HAL_PIXEL_FORMAT_BLOB && lockW > 0) {
+        out->blobSize = (out->bufferSize > 0) ? std::min(out->bufferSize, lockW) : lockW;
+    }
     int rc = gralloc_->lock(gralloc_, hnd, usage, 0, 0, lockW, lockH, &out->vaddr);
     if (rc != 0 || !out->vaddr) {
         ALOGE("lock(fmt=0x%x %dx%d) failed: %d", format, lockW, lockH, rc);

@@ -112,12 +112,15 @@ private:
         bool activeTrigger = false;
         bool locked = false;
         bool finePass = false;
+        bool fineExtended = false;
+        int32_t fineDir = 0;
         bool initSweepDone = false;
         size_t scanIdx = 0;
         std::vector<int32_t> candidates;
         int32_t pendingPos = -1;
         int32_t settleHold = 0;
         int64_t moveCmdNs = 0;
+        int64_t lastConvergeNs = 0;
         int32_t waitFrames = 0;
         bool lastHasAfReg = false;
         int32_t lastAfX = 0;
@@ -130,6 +133,8 @@ private:
         int32_t frameCounter = 0;
         uint8_t afState = 0;
         uint8_t prevTrigger = 0;
+        uint8_t prevAfMode = 0;
+        int32_t lastMoveDelta = 0;
         bool moving = false;
     };
 

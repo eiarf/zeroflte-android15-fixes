@@ -67,6 +67,7 @@ struct AeAwbResult {
     float rGain = 1.35f;
     float gGain = 1.00f;
     float bGain = 1.45f;
+    bool isFront = false;
 };
 
 struct SensorCtrlLimits {
@@ -84,17 +85,18 @@ struct SensorCtrlLimits {
 
 class AeAwbController {
 public:
-    explicit AeAwbController(BayerPattern pattern);
+    explicit AeAwbController(BayerPattern pattern, bool isFront = false);
 
     void reset(const SensorCtrlLimits& limits);
     AeAwbResult updateFromRaw(const uint16_t* raw, int32_t width, int32_t height,
                               int32_t strideBytes, const IspRequestParams& params,
-                              bool fastConvergence = false);
+                              bool fastConvergence = false, bool freezeAe = false);
 
     AeAwbResult current() const { return state_; }
 
 private:
     BayerPattern pattern_;
+    bool isFront_ = false;
     SensorCtrlLimits limits_{};
     AeAwbResult state_{};
     bool initialized_ = false;
@@ -128,20 +130,24 @@ private:
     void runParallel(int32_t height, const std::function<void(int32_t, int32_t)>& fn);
 
     void ensureHalfResRgb(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
-                          BayerPattern pattern, const WbCcmQ10& wc, bool lowLightSmooth);
+                          BayerPattern pattern, const WbCcmQ10& wc, bool lowLightSmooth,
+                          int blackLevel);
 
     bool writeRgba(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                    BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
-                   const WbCcmQ10& wc, bool lowLightSmooth, const LockedOutput& dst);
+                   const WbCcmQ10& wc, bool lowLightSmooth, int blackLevel,
+                   const LockedOutput& dst);
 
     bool writeYuv(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                   BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
-                  const WbCcmQ10& wc, bool lowLightSmooth, const LockedOutput& dst);
+                  const WbCcmQ10& wc, bool lowLightSmooth, int blackLevel,
+                  const LockedOutput& dst);
 
     bool writeJpeg(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                    BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
                    const WbCcmQ10& wc, const IspRequestParams& params,
-                   const AeAwbResult& gains, const LockedOutput& dst, int32_t* outBlobSizeBytes);
+                   const AeAwbResult& gains, int blackLevel, const LockedOutput& dst,
+                   int32_t* outBlobSizeBytes);
 
     std::array<uint8_t, 1024> gammaLut_{};
     std::vector<uint16_t> cachedRaw_;
