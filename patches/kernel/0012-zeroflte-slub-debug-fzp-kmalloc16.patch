@@ -1,0 +1,12 @@
+diff --git a/arch/arm64/configs/zeroflte_gki.fragment b/arch/arm64/configs/zeroflte_gki.fragment
+--- a/arch/arm64/configs/zeroflte_gki.fragment
++++ b/arch/arm64/configs/zeroflte_gki.fragment
+@@ -171,7 +171,7 @@
+ # unless userspace cancels it once the boot completes. The hardware
+ # watchdog runs from its probe (s3c2410_wdt.tmr_atboot). firmware_class.path
+ # lets drivers such as brcmfmac load firmware straight from /vendor/firmware.
+-CONFIG_CMDLINE="stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off bootconfig clk_ignore_unused pd_ignore_unused deferred_probe_timeout=0 fw_devlink=permissive rodata=on loglevel=4 printk.devkmsg=on log_buf_len=4M dsh_autorecovery=150 s3c2410_wdt.tmr_atboot=1 firmware_class.path=/vendor/firmware"
++CONFIG_CMDLINE="slub_debug=FZP,kmalloc-16 stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off bootconfig clk_ignore_unused pd_ignore_unused deferred_probe_timeout=0 fw_devlink=permissive rodata=on loglevel=4 printk.devkmsg=on log_buf_len=4M dsh_autorecovery=150 s3c2410_wdt.tmr_atboot=1 firmware_class.path=/vendor/firmware"
+ 
+ # Size: the Image must fit the 28 MiB BOOT partition with the ROM ramdisk.
+ # The A57/A53 have no pointer authentication, so the PAC-to-SCS patching
