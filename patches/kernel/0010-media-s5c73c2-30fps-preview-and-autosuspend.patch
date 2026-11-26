@@ -1,0 +1,31 @@
+diff --git a/drivers/media/i2c/s5c73c2.c b/drivers/media/i2c/s5c73c2.c
+index 4a32d84e1..dfb6eb0bf 100644
+--- a/drivers/media/i2c/s5c73c2.c
++++ b/drivers/media/i2c/s5c73c2.c
+@@ -353,7 +353,7 @@ static const struct s5c73c2_mode s5c73c2_modes[] = {
+ 		.width = 2664,
+ 		.height = 1500,
+ 		.hts = 6144,
+-		.vts_def = 1584,
++		.vts_def = 3168,
+ 		.expo_def = 1576,
+ 		.c73c2_mode = 6,
+ 		.paf_en = false,
+@@ -380,7 +380,7 @@ static const struct s5c73c2_mode s5k2p2_modes[] = {
+ 		.width = 2664,
+ 		.height = 1500,
+ 		.hts = 5880,
+-		.vts_def = 1586,
++		.vts_def = 3172,
+ 		.expo_def = 1570,
+ 		.c73c2_mode = 6,
+ 		.paf_en = false,
+@@ -896,7 +896,7 @@ static int s5c73c2_probe(struct i2c_client *client)
+ 	pm_runtime_set_active(c2->dev);
+ 	pm_runtime_get_noresume(c2->dev);
+ 	pm_runtime_enable(c2->dev);
+-	pm_runtime_set_autosuspend_delay(c2->dev, 3000);
++	pm_runtime_set_autosuspend_delay(c2->dev, 10000);
+ 	pm_runtime_use_autosuspend(c2->dev);
+ 
+ 	ret = v4l2_async_register_subdev_sensor(&c2->sd);

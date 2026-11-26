@@ -14,12 +14,16 @@
 #include <thread>
 #include <vector>
 
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 namespace s6cam {
 
 namespace {
 
 constexpr int kBlackLevel = 64;
-constexpr float kLinearTarget = 215.0f;  // Linear pre-gamma mean corresponding to comfortable mid-tone
+constexpr float kLinearTarget = 215.0f;
 
 struct BayerOffsets {
     int rx, ry;
@@ -55,78 +59,76 @@ inline int subBlack(uint16_t px) {
     return v > 0 ? v : 0;
 }
 
-struct BayerTap {
-    int32_t c;
+// 4-neighbor same-plane impulse clamp for Defect Pixel Correction (DPC)
+inline int clampDpc10(int c, int n0, int n1, int n2, int n3) {
+    const int lo = std::min(std::min(n0, n1), std::min(n2, n3));
+    const int hi = std::max(std::max(n0, n1), std::max(n2, n3));
+    const int avg = (n0 + n1 + n2 + n3) >> 2;
+    const int margin = 48 + (avg >> 3);
+    if (c > hi + margin) return hi + (margin >> 1);
+    if (c < lo - margin) return lo - (margin >> 1);
+    return c;
+}
+
+inline int readDpcRaw(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t strideU16,
+                      int x, int y) {
+    const int c = subBlack(raw[static_cast<size_t>(y) * strideU16 + x]);
+    if (x < 2 || x >= rawW - 2 || y < 2 || y >= rawH - 2) return c;
+    const int n0 = subBlack(raw[static_cast<size_t>(y) * strideU16 + (x - 2)]);
+    const int n1 = subBlack(raw[static_cast<size_t>(y) * strideU16 + (x + 2)]);
+    const int n2 = subBlack(raw[static_cast<size_t>(y - 2) * strideU16 + x]);
+    const int n3 = subBlack(raw[static_cast<size_t>(y + 2) * strideU16 + x]);
+    return clampDpc10(c, n0, n1, n2, n3);
+}
+
+struct CellTap1D {
+    int32_t i0;
+    int32_t i1;
     int32_t w0;
     int32_t w1;
 };
 
-std::vector<BayerTap> buildTapLut(float cropStart, float cropLen, int32_t dstDim, int32_t rawDim) {
-    std::vector<BayerTap> taps(static_cast<size_t>(dstDim));
+std::vector<CellTap1D> buildCellTapLut(float cropStart, float cropLen,
+                                       int32_t cellDim, int32_t dstDim) {
+    std::vector<CellTap1D> taps(static_cast<size_t>(dstDim));
     const float step = cropLen / std::max(1, dstDim);
-    const int32_t maxC = std::max(0, rawDim - 4);
+    const int32_t maxIdx = std::max(0, cellDim - 1);
     for (int32_t d = 0; d < dstDim; ++d) {
-        float s = cropStart + (d + 0.5f) * step;
-        int32_t c = std::clamp(static_cast<int32_t>(s) & ~1, 0, maxC);
-        float f = std::clamp((s - static_cast<float>(c)) * 0.5f, 0.0f, 1.0f);
-        int32_t w1 = static_cast<int32_t>(f * 256.0f + 0.5f);
-        taps[d] = {c, 256 - w1, w1};
+        const float s = cropStart + (d + 0.5f) * step;
+        const float fc = std::clamp(s * 0.5f - 0.5f, 0.0f, static_cast<float>(maxIdx));
+        const int32_t i0 = std::clamp(static_cast<int32_t>(std::floor(fc)), 0, maxIdx);
+        const int32_t i1 = std::min(i0 + 1, maxIdx);
+        const int32_t w1 = (i0 == i1) ? 0 : static_cast<int32_t>((fc - i0) * 256.0f + 0.5f);
+        taps[d] = {i0, i1, 256 - w1, w1};
     }
     return taps;
 }
 
-struct CachedBayerRows {
-    const uint16_t* r0; const uint16_t* r1;
-    const uint16_t* b0; const uint16_t* b1;
-    const uint16_t* g0_0; const uint16_t* g0_1;
-    const uint16_t* g1_0; const uint16_t* g1_1;
-    int rx, bx, g0x, g1x;
-    int wy0, wy1;
-};
-
-inline CachedBayerRows getCachedRows(const uint16_t* raw, int32_t strideU16,
-                                     const BayerOffsets& bo, const BayerTap& yt) {
-    const uint16_t* base = raw + static_cast<size_t>(yt.c) * strideU16;
-    return {
-        base + bo.ry * strideU16,
-        base + (bo.ry + 2) * strideU16,
-        base + bo.by * strideU16,
-        base + (bo.by + 2) * strideU16,
-        base + bo.g0y * strideU16,
-        base + (bo.g0y + 2) * strideU16,
-        base + bo.g1y * strideU16,
-        base + (bo.g1y + 2) * strideU16,
-        bo.rx, bo.bx, bo.g0x, bo.g1x,
-        yt.w0, yt.w1,
-    };
+inline int clampDpcH10(int c, int left, int right) {
+    const int lo = left < right ? left : right;
+    const int hi = left > right ? left : right;
+    const int margin = 64 + ((left + right) >> 3);
+    if (c > hi + margin) return hi + (margin >> 1);
+    if (c < lo - margin) return lo - (margin >> 1);
+    return c;
 }
 
-inline void sampleTapCell(const CachedBayerRows& yr, const BayerTap& xt,
-                          int& outR, int& outG, int& outB) {
-    const int cx = xt.c;
-    const int w00 = (xt.w0 * yr.wy0) >> 8;
-    const int w10 = (xt.w1 * yr.wy0) >> 8;
-    const int w01 = (xt.w0 * yr.wy1) >> 8;
-    const int w11 = 256 - w00 - w10 - w01;
+inline int softKnee10Fast(int v) {
+    if (v <= 820) return v < 0 ? 0 : v;
+    if (v <= 1228) return 820 + ((v - 820) >> 2);
+    const int out = 922 + ((v - 1228) >> 4);
+    return out > 1023 ? 1023 : out;
+}
 
-    const int r00 = subBlack(yr.r0[cx + yr.rx]);
-    const int r10 = subBlack(yr.r0[cx + 2 + yr.rx]);
-    const int r01 = subBlack(yr.r1[cx + yr.rx]);
-    const int r11 = subBlack(yr.r1[cx + 2 + yr.rx]);
-
-    const int g00 = (subBlack(yr.g0_0[cx + yr.g0x]) + subBlack(yr.g1_0[cx + yr.g1x])) >> 1;
-    const int g10 = (subBlack(yr.g0_0[cx + 2 + yr.g0x]) + subBlack(yr.g1_0[cx + 2 + yr.g1x])) >> 1;
-    const int g01 = (subBlack(yr.g0_1[cx + yr.g0x]) + subBlack(yr.g1_1[cx + yr.g1x])) >> 1;
-    const int g11 = (subBlack(yr.g0_1[cx + 2 + yr.g0x]) + subBlack(yr.g1_1[cx + 2 + yr.g1x])) >> 1;
-
-    const int b00 = subBlack(yr.b0[cx + yr.bx]);
-    const int b10 = subBlack(yr.b0[cx + 2 + yr.bx]);
-    const int b01 = subBlack(yr.b1[cx + yr.bx]);
-    const int b11 = subBlack(yr.b1[cx + 2 + yr.bx]);
-
-    outR = (r00 * w00 + r10 * w10 + r01 * w01 + r11 * w11) >> 8;
-    outG = (g00 * w00 + g10 * w10 + g01 * w01 + g11 * w11) >> 8;
-    outB = (b00 * w00 + b10 * w10 + b01 * w01 + b11 * w11) >> 8;
+inline void applyWbCcmFast(const WbCcmQ10& wc, int lr, int lg, int lb,
+                           int& outR, int& outG, int& outB) {
+    const int wr = softKnee10Fast((lr * wc.rGainQ8) >> 8);
+    const int wg = softKnee10Fast((lg * wc.gGainQ8) >> 8);
+    const int wb = softKnee10Fast((lb * wc.bGainQ8) >> 8);
+    const int* m = wc.ccm;
+    outR = clamp10((m[0] * wr + m[1] * wg + m[2] * wb) >> 10);
+    outG = clamp10((m[3] * wr + m[4] * wg + m[5] * wb) >> 10);
+    outB = clamp10((m[6] * wr + m[7] * wg + m[8] * wb) >> 10);
 }
 
 void computeAspectSafeCrop(int32_t rawW, int32_t rawH, int32_t activeW, int32_t activeH,
@@ -154,7 +156,6 @@ void computeAspectSafeCrop(int32_t rawW, int32_t rawH, int32_t activeW, int32_t 
     float baseW = normW * rawW;
     float baseH = normH * rawH;
 
-    // Preserve target aspect ratio inside base crop
     float dstAspect = static_cast<float>(dstW) / std::max(1, dstH);
     float srcAspect = baseW / std::max(1.0f, baseH);
     if (srcAspect > dstAspect * 1.01f) {
@@ -174,12 +175,10 @@ void computeAspectSafeCrop(int32_t rawW, int32_t rawH, int32_t activeW, int32_t 
 }
 
 WbCcmQ10 buildWbCcm(const AeAwbResult& gains) {
-    // Tuned mild Samsung CMOS D65 sRGB matrix; normalize and clamp WB BEFORE CCM so clipped pixels
-    // saturate cleanly to neutral white rather than pink.
     static constexpr float kCcm[3][3] = {
-        { 1.28f, -0.20f, -0.08f},
-        {-0.12f,  1.22f, -0.10f},
-        {-0.04f, -0.24f,  1.28f},
+        { 1.24f, -0.16f, -0.08f},
+        {-0.06f,  1.12f, -0.06f},
+        {-0.04f, -0.18f,  1.22f},
     };
     const float whiteScale = 256.0f * 1023.0f / (1023.0f - kBlackLevel);
     const float scale = std::clamp(gains.swDgain, 1.0f, 8.0f) * whiteScale;
@@ -198,15 +197,51 @@ WbCcmQ10 buildWbCcm(const AeAwbResult& gains) {
     return wc;
 }
 
+// Smooth highlight roll-off above linear 820 so bright highlights compress smoothly
+inline int softKnee10(int v) {
+    if (v <= 820) return v < 0 ? 0 : v;
+    const int over = v - 820;
+    return std::min(1023, 820 + (over * 203) / (over + 203));
+}
+
 inline void applyWbCcm(const WbCcmQ10& wc, int lr, int lg, int lb,
                        int& outR, int& outG, int& outB) {
-    const int wr = std::min(1023, (lr * wc.rGainQ8) >> 8);
-    const int wg = std::min(1023, (lg * wc.gGainQ8) >> 8);
-    const int wb = std::min(1023, (lb * wc.bGainQ8) >> 8);
+    const int wr = softKnee10((lr * wc.rGainQ8) >> 8);
+    const int wg = softKnee10((lg * wc.gGainQ8) >> 8);
+    const int wb = softKnee10((lb * wc.bGainQ8) >> 8);
     const int* m = wc.ccm;
     outR = clamp10((m[0] * wr + m[1] * wg + m[2] * wb) >> 10);
     outG = clamp10((m[3] * wr + m[4] * wg + m[5] * wb) >> 10);
     outB = clamp10((m[6] * wr + m[7] * wg + m[8] * wb) >> 10);
+}
+
+// 5-tap edge-aware Chroma NR using pre-allocated scratch buffers (zero heap alloc per row)
+inline void chromaNrPtrRow(int32_t n, uint8_t* cb, uint8_t* cr, size_t step,
+                           uint8_t* cbCopy, uint8_t* crCopy) {
+    if (n < 5) return;
+    for (int32_t i = 0; i < n; ++i) {
+        cbCopy[i] = cb[static_cast<size_t>(i) * step];
+        crCopy[i] = cr[static_cast<size_t>(i) * step];
+    }
+    constexpr int32_t kEdgeThresh = 24;
+    for (int32_t i = 2; i < n - 2; ++i) {
+        const int cCb = cbCopy[i];
+        const int cCr = crCopy[i];
+        int sumCb = cCb * 2, sumCr = cCr * 2, wSum = 2;
+        for (int k = -2; k <= 2; ++k) {
+            if (k == 0) continue;
+            const int nCb = cbCopy[i + k];
+            const int nCr = crCopy[i + k];
+            if (std::abs(nCb - cCb) + std::abs(nCr - cCr) <= kEdgeThresh) {
+                const int w = (std::abs(k) == 1) ? 2 : 1;
+                sumCb += nCb * w;
+                sumCr += nCr * w;
+                wSum += w;
+            }
+        }
+        cb[static_cast<size_t>(i) * step] = static_cast<uint8_t>(sumCb / wSum);
+        cr[static_cast<size_t>(i) * step] = static_cast<uint8_t>(sumCr / wSum);
+    }
 }
 
 int orientationToExif(int deg) {
@@ -219,7 +254,6 @@ int orientationToExif(int deg) {
 }
 
 std::vector<uint8_t> buildExifApp1(int32_t orientationDeg, int64_t expoNs, int32_t iso, float focalMm) {
-    // Minimal clean big-endian TIFF EXIF APP1 header carrying Orientation + Camera Model
     std::vector<uint8_t> b;
     auto push16 = [&](uint16_t v) {
         b.push_back(static_cast<uint8_t>(v >> 8));
@@ -241,21 +275,19 @@ std::vector<uint8_t> buildExifApp1(int32_t orientationDeg, int64_t expoNs, int32
     const char hdr[] = {'E', 'x', 'i', 'f', 0, 0};
     b.insert(b.end(), hdr, hdr + 6);
     const size_t tiffStart = b.size();
-    // TIFF header "MM" (big endian), 0x002A, offset to IFD0 = 8
     b.push_back('M'); b.push_back('M');
     push16(42);
     push32(8);
 
-    // IFD0: 4 tags (Make, Model, Orientation, ExifIFD)
     push16(4);
     const size_t makeOffPos = b.size() + 8;
-    push16(0x010F); push16(2); push32(8); push32(0);   // Make "samsung\0" (8)
+    push16(0x010F); push16(2); push32(8); push32(0);
     const size_t modelOffPos = b.size() + 8;
-    push16(0x0110); push16(2); push32(9); push32(0);   // Model "SM-G920I\0" (9)
+    push16(0x0110); push16(2); push32(9); push32(0);
     push16(0x0112); push16(3); push32(1); push16(orientationToExif(orientationDeg)); push16(0);
     const size_t exifIfdOffPos = b.size() + 8;
     push16(0x8769); push16(4); push32(1); push32(0);
-    push32(0);  // Next IFD = 0
+    push32(0);
 
     patch32(makeOffPos, static_cast<uint32_t>(b.size() - tiffStart));
     const char mk[] = "samsung";
@@ -266,7 +298,6 @@ std::vector<uint8_t> buildExifApp1(int32_t orientationDeg, int64_t expoNs, int32
     b.insert(b.end(), md, md + sizeof(md));
     if ((b.size() & 1) != 0) b.push_back(0);
 
-    // Exif SubIFD: ExposureTime, ISOSpeedRatings, FocalLength
     patch32(exifIfdOffPos, static_cast<uint32_t>(b.size() - tiffStart));
     push16(3);
     const size_t expOffPos = b.size() + 8;
@@ -298,13 +329,14 @@ void AeAwbController::reset(const SensorCtrlLimits& limits) {
     state_.swDgain = 1.0f;
     state_.appliedExposureNs = static_cast<int64_t>(state_.exposureLines * limits_.lineDurationNs);
     state_.appliedSensitivity = (state_.analogGain * 100) / std::max(1, limits_.againMin);
-    state_.rGain = 1.40f;
+    state_.rGain = 1.65f;
     state_.gGain = 1.00f;
-    state_.bGain = 1.50f;
+    state_.bGain = 1.80f;
     state_.aeState = ANDROID_CONTROL_AE_STATE_SEARCHING;
     state_.awbState = ANDROID_CONTROL_AWB_STATE_SEARCHING;
     exposureValue_ = state_.exposureLines * (state_.analogGain / 32.0) * (state_.digitalGain / 256.0);
     aeHoldFrames_ = 0;
+    wbFrames_ = 0;
     initialized_ = true;
 }
 
@@ -356,13 +388,25 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
 
     double sumLuma = 0.0;
     double countLuma = 0.0;
+    double highlightCount = 0.0;
+    double totalSamples = 0.0;
     double sumR = 0.0, sumG = 0.0, sumB = 0.0;
     double countWb = 0.0;
+    double allR = 0.0, allG = 0.0, allB = 0.0;
+    double countAll = 0.0;
 
     const int marginX = width / 10;
     const int marginY = height / 10;
+    const int centerX0 = width / 4;
+    const int centerX1 = (width * 3) / 4;
+    const int centerY0 = height / 4;
+    const int centerY1 = (height * 3) / 4;
+    const double curRGain = static_cast<double>(state_.rGain);
+    const double curBGain = static_cast<double>(state_.bGain);
+
     for (int y = marginY; y < height - marginY - 1; y += stepY) {
         const int cy = y & ~1;
+        const bool inCenterY = (cy >= centerY0 && cy <= centerY1);
         for (int x = marginX; x < width - marginX - 1; x += stepX) {
             const int cx = x & ~1;
             int r = static_cast<int>(raw[(cy + bo.ry) * strideU16 + cx + bo.rx] & 0x3FF) - kBlackLevel;
@@ -373,18 +417,36 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
             b = std::max(0, b);
             int g = std::max(0, (g0 + g1) >> 1);
 
+            const double weight = (inCenterY && cx >= centerX0 && cx <= centerX1) ? 2.0 : 1.0;
             double yLin = 0.299 * r + 0.587 * g + 0.114 * b;
-            sumLuma += yLin;
-            countLuma += 1.0;
+            sumLuma += yLin * weight;
+            countLuma += weight;
 
             int maxC = std::max({r, g, b});
             int minC = std::min({r, g, b});
+            if (maxC >= 920) highlightCount += 1.0;
+            totalSamples += 1.0;
+
             const double effGain = std::clamp(static_cast<double>(state_.swDgain), 1.0, 8.0);
-            if (maxC < 880 && (static_cast<double>(minC) * effGain) > 20.0) {
-                sumR += r;
-                sumG += g;
-                sumB += b;
-                countWb += 1.0;
+            if (maxC < 900 && (static_cast<double>(minC) * effGain) > 10.0) {
+                allR += r;
+                allG += g;
+                allB += b;
+                countAll += 1.0;
+
+                // Evaluate neutrality in current WB-compensated space (not raw space, where G naturally exceeds R/B > 2.25x)
+                const double wr = r * curRGain;
+                const double wg = static_cast<double>(g);
+                const double wb = b * curBGain;
+                const double maxW = std::max({wr, wg, wb});
+                const double minW = std::min({wr, wg, wb});
+                if (maxW <= minW * 1.45) {
+                    const double wbW = (maxC >= 180) ? 2.0 : 1.0;
+                    sumR += r * wbW;
+                    sumG += g * wbW;
+                    sumB += b * wbW;
+                    countWb += wbW;
+                }
             }
         }
     }
@@ -398,7 +460,9 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
         aeHoldFrames_ = 0;
         double meanY = std::max(4.0, (sumLuma / countLuma) * static_cast<double>(state_.swDgain));
         double compMult = std::pow(2.0, params.aeExposureComp / 3.0);
-        double target = kLinearTarget * compMult;
+        double hiFrac = (totalSamples > 0.0) ? (highlightCount / totalSamples) : 0.0;
+        double hiGuard = (hiFrac > 0.06) ? std::max(0.78, 1.0 - (hiFrac - 0.06) * 2.0) : 1.0;
+        double target = kLinearTarget * compMult * hiGuard;
         double ratio = target / meanY;
 
         if (std::abs(ratio - 1.0) < 0.12) {
@@ -406,16 +470,15 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
         } else {
             state_.aeState = ANDROID_CONTROL_AE_STATE_SEARCHING;
             ratio = fastConvergence ? std::clamp(ratio, 0.03, 4.0) : std::clamp(ratio, 0.5, 2.0);
-            const double damp = fastConvergence ? 1.00 : 0.30;
+            const double damp = fastConvergence ? 1.00 : 0.35;
             double dampedRatio = 1.0 + damp * (ratio - 1.0);
-            const int32_t totalDgainMax = 768;   // <= 3.0x combined HW+SW digital gain
+            const int32_t totalDgainMax = 768;
             const int32_t hwDgainMax = std::clamp(totalDgainMax, limits_.dgainMin, limits_.dgainMax);
             double maxEv = static_cast<double>(limits_.expoMax) *
                            (limits_.againMax / 32.0) * (totalDgainMax / 256.0);
             double minEv = static_cast<double>(limits_.expoMin);
             exposureValue_ = std::clamp(exposureValue_ * dampedRatio, minEv, maxEv);
 
-            // Prefer shutter speed up to ~33 ms (or expoMax * 0.65), then analog gain, then digital gain
             double prefMaxLines = std::min<double>(limits_.expoMax,
                                                    33333333.0 / std::max(1.0, limits_.lineDurationNs));
             if (prefMaxLines < limits_.expoMin) prefMaxLines = limits_.expoMax;
@@ -437,7 +500,7 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
             int32_t newDgain = static_cast<int32_t>(std::lround(hwDgainF));
             if (newExpo != state_.exposureLines || newAgain != state_.analogGain ||
                 newDgain != state_.digitalGain) {
-                aeHoldFrames_ = 2;  // allow sensor I2C + 2-frame pipeline latency to settle before resampling
+                aeHoldFrames_ = 2;
             }
             state_.exposureLines = newExpo;
             state_.analogGain = newAgain;
@@ -450,18 +513,23 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
         }
     }
 
-    if (countWb >= 32.0 && params.awbMode == ANDROID_CONTROL_AWB_MODE_AUTO && !params.awbLock) {
-        double avgR = std::max(8.0, sumR / countWb);
-        double avgG = std::max(8.0, sumG / countWb);
-        double avgB = std::max(8.0, sumB / countWb);
-        float targetR = static_cast<float>(std::clamp(avgG / avgR, 0.75, 2.8));
-        float targetB = static_cast<float>(std::clamp(avgG / avgB, 0.75, 2.8));
+    const bool useNeutral = (countWb >= 24.0);
+    if ((useNeutral || countAll >= 24.0) &&
+        params.awbMode == ANDROID_CONTROL_AWB_MODE_AUTO && !params.awbLock) {
+        const double denom = useNeutral ? countWb : countAll;
+        double avgR = std::max(6.0, (useNeutral ? sumR : allR) / denom);
+        double avgG = std::max(6.0, (useNeutral ? sumG : allG) / denom);
+        double avgB = std::max(6.0, (useNeutral ? sumB : allB) / denom);
+        float targetR = static_cast<float>(std::clamp(avgG / avgR, 0.75, 4.2));
+        float targetB = static_cast<float>(std::clamp(avgG / avgB, 0.75, 4.2));
 
         float errR = std::abs(targetR - state_.rGain);
         float errB = std::abs(targetB - state_.bGain);
-        state_.rGain = state_.rGain * 0.80f + targetR * 0.20f;
+        const float alpha = (fastConvergence || wbFrames_ < 6) ? 0.50f : 0.25f;
+        state_.rGain = state_.rGain * (1.0f - alpha) + targetR * alpha;
         state_.gGain = 1.00f;
-        state_.bGain = state_.bGain * 0.80f + targetB * 0.20f;
+        state_.bGain = state_.bGain * (1.0f - alpha) + targetB * alpha;
+        ++wbFrames_;
         state_.awbState = (errR < 0.04f && errB < 0.04f)
                               ? ANDROID_CONTROL_AWB_STATE_CONVERGED
                               : ANDROID_CONTROL_AWB_STATE_SEARCHING;
@@ -472,7 +540,7 @@ AeAwbResult AeAwbController::updateFromRaw(const uint16_t* raw, int32_t width, i
 
 SoftIsp::SoftIsp() {
     initGammaLut();
-    constexpr size_t kNumWorkers = 3;
+    constexpr size_t kNumWorkers = 5;
     workers_.reserve(kNumWorkers);
     for (size_t id = 0; id < kNumWorkers; ++id) {
         workers_.emplace_back([this, id]() {
@@ -488,7 +556,7 @@ SoftIsp::SoftIsp() {
                     fn = jobFn_;
                     h = jobHeight_;
                 }
-                const int32_t total = 4;
+                const int32_t total = static_cast<int32_t>(workers_.size()) + 1;
                 const int32_t chunk = (h + total - 1) / total;
                 const int32_t y0 = static_cast<int32_t>(id) * chunk;
                 const int32_t y1 = std::min(h, y0 + chunk);
@@ -551,25 +619,44 @@ const uint16_t* SoftIsp::stageRaw(const uint16_t* raw, int32_t rawW, int32_t raw
         cachedRaw_.resize(need);
     }
     stagedW_ = rawW;
-    if (rawStrideBytes == rawW * 2) {
-        std::memcpy(cachedRaw_.data(), raw, need * sizeof(uint16_t));
-    } else {
-        const uint8_t* src = reinterpret_cast<const uint8_t*>(raw);
-        for (int32_t y = 0; y < rawH; ++y) {
-            std::memcpy(cachedRaw_.data() + static_cast<size_t>(y) * rawW,
-                        src + static_cast<size_t>(y) * rawStrideBytes,
-                        static_cast<size_t>(rawW) * sizeof(uint16_t));
+    demosaicValid_ = false;
+    demosaicSrc_ = nullptr;
+    const uint8_t* srcBase = reinterpret_cast<const uint8_t*>(raw);
+    uint16_t* dstBase = cachedRaw_.data();
+
+    runParallel(rawH, [&](int32_t y0, int32_t y1) {
+        for (int32_t y = y0; y < y1; ++y) {
+            const uint16_t* sRow = reinterpret_cast<const uint16_t*>(
+                srcBase + static_cast<size_t>(y) * rawStrideBytes);
+            uint16_t* dRow = dstBase + static_cast<size_t>(y) * rawW;
+            int32_t x = 0;
+#if defined(__aarch64__)
+            for (; x + 32 <= rawW; x += 32) {
+                uint16x8_t v0 = vld1q_u16(sRow + x);
+                uint16x8_t v1 = vld1q_u16(sRow + x + 8);
+                uint16x8_t v2 = vld1q_u16(sRow + x + 16);
+                uint16x8_t v3 = vld1q_u16(sRow + x + 24);
+                vst1q_u16(dRow + x, v0);
+                vst1q_u16(dRow + x + 8, v1);
+                vst1q_u16(dRow + x + 16, v2);
+                vst1q_u16(dRow + x + 24, v3);
+            }
+#endif
+            if (x < rawW) {
+                std::memcpy(dRow + x, sRow + x, static_cast<size_t>(rawW - x) * sizeof(uint16_t));
+            }
         }
-    }
+    });
     return cachedRaw_.data();
 }
 
 void SoftIsp::initGammaLut() {
     for (int i = 0; i < 1024; ++i) {
         double x = static_cast<double>(i) / 1023.0;
-        // Standard sRGB transfer curve
         double srgb = (x <= 0.0031308) ? (x * 12.92) : (1.055 * std::pow(x, 1.0 / 2.2) - 0.055);
-        int v = static_cast<int>(std::lround(srgb * 255.0));
+        double scurve = srgb * srgb * (3.0 - 2.0 * srgb);
+        double tone = srgb * 0.72 + scurve * 0.28;
+        int v = static_cast<int>(std::lround(tone * 255.0));
         gammaLut_[i] = clampU8(v);
     }
 }
@@ -586,6 +673,7 @@ bool SoftIsp::processOutput(const uint16_t* raw, int32_t rawW, int32_t rawH, int
                           cropX, cropY, cropW, cropH);
 
     const WbCcmQ10 wc = buildWbCcm(gains);
+    const bool lowLightSmooth = (gains.swDgain > 1.25f || gains.appliedSensitivity >= 400);
 
     if (dst.format == HAL_PIXEL_FORMAT_BLOB) {
         return writeJpeg(raw, rawW, rawH, rawStrideU16, pattern, cropX, cropY, cropW, cropH,
@@ -593,75 +681,205 @@ bool SoftIsp::processOutput(const uint16_t* raw, int32_t rawW, int32_t rawH, int
     }
     if (dst.isYcbcr) {
         return writeYuv(raw, rawW, rawH, rawStrideU16, pattern, cropX, cropY, cropW, cropH,
-                        wc, dst);
+                        wc, lowLightSmooth, dst);
     }
     return writeRgba(raw, rawW, rawH, rawStrideU16, pattern, cropX, cropY, cropW, cropH,
-                     wc, dst);
+                     wc, lowLightSmooth, dst);
 }
 
-void chromaNrPtrRow(int32_t n, uint8_t* cb, uint8_t* cr, size_t step) {
-    if (n < 5) return;
-    std::vector<uint8_t> cbCopy(static_cast<size_t>(n));
-    std::vector<uint8_t> crCopy(static_cast<size_t>(n));
-    for (int32_t i = 0; i < n; ++i) {
-        cbCopy[i] = cb[static_cast<size_t>(i) * step];
-        crCopy[i] = cr[static_cast<size_t>(i) * step];
+void SoftIsp::ensureHalfResRgb(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
+                               BayerPattern pattern, const WbCcmQ10& wc, bool lowLightSmooth) {
+    const int32_t cellW = std::max(1, rawW / 2);
+    const int32_t cellH = std::max(1, rawH / 2);
+    if (demosaicValid_ && demosaicSrc_ == raw && cachedCellW_ == cellW && cachedCellH_ == cellH) {
+        return;
     }
-    constexpr int32_t kEdgeThresh = 24;
-    for (int32_t i = 2; i < n - 2; ++i) {
-        const int cCb = cbCopy[i];
-        const int cCr = crCopy[i];
-        int sumCb = cCb * 2, sumCr = cCr * 2, wSum = 2;
-        for (int k = -2; k <= 2; ++k) {
-            if (k == 0) continue;
-            const int nCb = cbCopy[i + k];
-            const int nCr = crCopy[i + k];
-            if (std::abs(nCb - cCb) + std::abs(nCr - cCr) <= kEdgeThresh) {
-                const int w = (std::abs(k) == 1) ? 2 : 1;
-                sumCb += nCb * w;
-                sumCr += nCr * w;
-                wSum += w;
+
+    previewRgb_.resize(static_cast<size_t>(cellW) * cellH);
+
+    runParallel(cellH, [&](int32_t cy0, int32_t cy1) {
+        for (int32_t cy = cy0; cy < cy1; ++cy) {
+            const uint16_t* r0 = raw + static_cast<size_t>(cy * 2) * rawStrideU16;
+            const uint16_t* r1 = r0 + rawStrideU16;
+            uint32_t* outRow = previewRgb_.data() + static_cast<size_t>(cy) * cellW;
+
+            auto readCell = [&](int32_t cx, int& outR, int& outG, int& outB) {
+                const int32_t rx = cx * 2;
+                const int p00 = subBlack(r0[rx]);
+                const int p01 = subBlack(r0[rx + 1]);
+                const int p10 = subBlack(r1[rx]);
+                const int p11 = subBlack(r1[rx + 1]);
+                switch (pattern) {
+                    case BayerPattern::GRBG:
+                        outR = p01; outG = (p00 + p11) >> 1; outB = p10;
+                        break;
+                    case BayerPattern::BGGR:
+                        outR = p11; outG = (p01 + p10) >> 1; outB = p00;
+                        break;
+                    case BayerPattern::GBRG:
+                        outR = p10; outG = (p00 + p11) >> 1; outB = p01;
+                        break;
+                    case BayerPattern::RGGB:
+                    default:
+                        outR = p00; outG = (p01 + p10) >> 1; outB = p11;
+                        break;
+                }
+            };
+
+            auto encodeCell = [&](int lr, int lg, int lb) -> uint32_t {
+                int cr, cg, cb;
+                applyWbCcmFast(wc, lr, lg, lb, cr, cg, cb);
+                const uint32_t r = gammaLut_[cr];
+                const uint32_t g = gammaLut_[cg];
+                const uint32_t b = gammaLut_[cb];
+                return r | (g << 8) | (b << 16);
+            };
+
+            if (cellW == 1) {
+                int lr, lg, lb;
+                readCell(0, lr, lg, lb);
+                outRow[0] = encodeCell(lr, lg, lb);
+                continue;
+            }
+
+            int rPrev, gPrev, bPrev;
+            int rCur, gCur, bCur;
+            readCell(0, rPrev, gPrev, bPrev);
+            outRow[0] = encodeCell(rPrev, gPrev, bPrev);
+            readCell(1, rCur, gCur, bCur);
+
+            for (int32_t cx = 1; cx < cellW - 1; ++cx) {
+                int rNext, gNext, bNext;
+                readCell(cx + 1, rNext, gNext, bNext);
+                const int r = clampDpcH10(rCur, rPrev, rNext);
+                const int g = clampDpcH10(gCur, gPrev, gNext);
+                const int b = clampDpcH10(bCur, bPrev, bNext);
+                outRow[cx] = encodeCell(r, g, b);
+                rPrev = rCur; gPrev = gCur; bPrev = bCur;
+                rCur = rNext; gCur = gNext; bCur = bNext;
+            }
+            outRow[cellW - 1] = encodeCell(rCur, gCur, bCur);
+
+            if (lowLightSmooth && cellW >= 3) {
+                uint32_t pPrev = outRow[0];
+                uint32_t pCur = outRow[1];
+                for (int32_t cx = 1; cx < cellW - 1; ++cx) {
+                    const uint32_t pNext = outRow[cx + 1];
+                    const int gP = static_cast<int>((pPrev >> 8) & 0xFF);
+                    const int gC = static_cast<int>((pCur >> 8) & 0xFF);
+                    const int gN = static_cast<int>((pNext >> 8) & 0xFF);
+                    if (std::abs(gP - gC) + std::abs(gN - gC) <= 36) {
+                        const int drP = static_cast<int>(pPrev & 0xFF) - gP;
+                        const int drC = static_cast<int>(pCur & 0xFF) - gC;
+                        const int drN = static_cast<int>(pNext & 0xFF) - gN;
+                        const int dbP = static_cast<int>((pPrev >> 16) & 0xFF) - gP;
+                        const int dbC = static_cast<int>((pCur >> 16) & 0xFF) - gC;
+                        const int dbN = static_cast<int>((pNext >> 16) & 0xFF) - gN;
+                        const uint32_t rOut = clampU8(gC + ((drP + 2 * drC + drN + 2) >> 2));
+                        const uint32_t bOut = clampU8(gC + ((dbP + 2 * dbC + dbN + 2) >> 2));
+                        outRow[cx] = rOut | (static_cast<uint32_t>(gC) << 8) | (bOut << 16);
+                    }
+                    pPrev = pCur;
+                    pCur = pNext;
+                }
             }
         }
-        cb[static_cast<size_t>(i) * step] = static_cast<uint8_t>(sumCb / wSum);
-        cr[static_cast<size_t>(i) * step] = static_cast<uint8_t>(sumCr / wSum);
-    }
+    });
+
+    demosaicSrc_ = raw;
+    cachedCellW_ = cellW;
+    cachedCellH_ = cellH;
+    demosaicValid_ = true;
 }
 
 bool SoftIsp::writeRgba(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                         BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
-                        const WbCcmQ10& wc, const LockedOutput& dst) {
+                        const WbCcmQ10& wc, bool lowLightSmooth, const LockedOutput& dst) {
     if (!dst.vaddr || dst.width <= 0 || dst.height <= 0) return false;
     uint8_t* base = static_cast<uint8_t*>(dst.vaddr);
     const int32_t stridePx = std::max(dst.stride, dst.width);
-    const BayerOffsets bo = getBayerOffsets(pattern);
-    const auto xTaps = buildTapLut(cropX, cropW, dst.width, rawW);
-    const auto yTaps = buildTapLut(cropY, cropH, dst.height, rawH);
 
+    ensureHalfResRgb(raw, rawW, rawH, rawStrideU16, pattern, wc, lowLightSmooth);
+
+    const auto xTaps = buildCellTapLut(cropX, cropW, cachedCellW_, dst.width);
+    const auto yTaps = buildCellTapLut(cropY, cropH, cachedCellH_, dst.height);
     const bool swapRB = (dst.format == HAL_PIXEL_FORMAT_BGRA_8888);
+    const size_t rowBytes = static_cast<size_t>(dst.width) * 4;
 
     runParallel(dst.height, [&](int32_t y0, int32_t y1) {
-        std::vector<uint32_t> lineBuf(static_cast<size_t>(dst.width));
-        for (int32_t dy = y0; dy < y1; ++dy) {
-            const CachedBayerRows yr = getCachedRows(raw, rawStrideU16, bo, yTaps[dy]);
-            uint32_t* out32 = lineBuf.data();
+        std::vector<uint8_t> rowBuf0(rowBytes);
+        std::vector<uint8_t> rowBuf1(rowBytes);
+        std::vector<uint8_t> outBuf(rowBytes);
+        uint8_t* ptr0 = rowBuf0.data();
+        uint8_t* ptr1 = rowBuf1.data();
+        int32_t idx0 = -1;
+        int32_t idx1 = -1;
+
+        auto resampleHoriz = [&](int32_t cy, uint8_t* dstRow) {
+            const uint32_t* s = previewRgb_.data() + static_cast<size_t>(cy) * cachedCellW_;
+            uint32_t* out32 = reinterpret_cast<uint32_t*>(dstRow);
             for (int32_t dx = 0; dx < dst.width; ++dx) {
-                int lr, lg, lb, cr, cg, cb;
-                sampleTapCell(yr, xTaps[dx], lr, lg, lb);
-                applyWbCcm(wc, lr, lg, lb, cr, cg, cb);
-
-                const uint32_t ur = gammaLut_[cr];
-                const uint32_t ug = gammaLut_[cg];
-                const uint32_t ub = gammaLut_[cb];
-
+                const CellTap1D& xt = xTaps[dx];
+                const uint32_t p0 = s[xt.i0];
+                const uint32_t p1 = s[xt.i1];
+                const uint32_t ur = (((p0 & 0xFFu) * xt.w0 + (p1 & 0xFFu) * xt.w1) >> 8);
+                const uint32_t ug = ((((p0 >> 8) & 0xFFu) * xt.w0 + ((p1 >> 8) & 0xFFu) * xt.w1) >> 8);
+                const uint32_t ub = ((((p0 >> 16) & 0xFFu) * xt.w0 + ((p1 >> 16) & 0xFFu) * xt.w1) >> 8);
                 if (swapRB) {
                     out32[dx] = 0xFF000000u | (ur << 16) | (ug << 8) | ub;
                 } else {
                     out32[dx] = 0xFF000000u | (ub << 16) | (ug << 8) | ur;
                 }
             }
-            uint8_t* rowPtr = base + static_cast<size_t>(dy) * stridePx * 4;
-            std::memcpy(rowPtr, lineBuf.data(), static_cast<size_t>(dst.width) * 4);
+        };
+
+        for (int32_t dy = y0; dy < y1; ++dy) {
+            const CellTap1D& yt = yTaps[dy];
+            if (yt.i0 != idx0) {
+                if (yt.i0 == idx1) {
+                    std::swap(ptr0, ptr1);
+                    std::swap(idx0, idx1);
+                } else {
+                    resampleHoriz(yt.i0, ptr0);
+                    idx0 = yt.i0;
+                }
+            }
+            if (yt.i1 != yt.i0 && yt.w1 != 0 && yt.i1 != idx1) {
+                resampleHoriz(yt.i1, ptr1);
+                idx1 = yt.i1;
+            }
+
+            uint8_t* dstRow = base + static_cast<size_t>(dy) * stridePx * 4;
+            if (yt.w1 == 0 || yt.i0 == yt.i1) {
+                std::memcpy(dstRow, ptr0, rowBytes);
+                continue;
+            }
+            if (yt.w0 == 0) {
+                if (yt.i1 != idx1) {
+                    resampleHoriz(yt.i1, ptr1);
+                    idx1 = yt.i1;
+                }
+                std::memcpy(dstRow, ptr1, rowBytes);
+                continue;
+            }
+
+            uint8_t* outPtr = outBuf.data();
+            size_t bx = 0;
+#if defined(__aarch64__)
+            const uint8x8_t vw0 = vdup_n_u8(static_cast<uint8_t>(yt.w0));
+            const uint8x8_t vw1 = vdup_n_u8(static_cast<uint8_t>(yt.w1));
+            for (; bx + 16 <= rowBytes; bx += 16) {
+                uint8x16_t a = vld1q_u8(ptr0 + bx);
+                uint8x16_t b = vld1q_u8(ptr1 + bx);
+                uint16x8_t lo = vmlal_u8(vmull_u8(vget_low_u8(a), vw0), vget_low_u8(b), vw1);
+                uint16x8_t hi = vmlal_u8(vmull_u8(vget_high_u8(a), vw0), vget_high_u8(b), vw1);
+                vst1q_u8(outPtr + bx, vcombine_u8(vrshrn_n_u16(lo, 8), vrshrn_n_u16(hi, 8)));
+            }
+#endif
+            for (; bx < rowBytes; ++bx) {
+                outPtr[bx] = static_cast<uint8_t>((ptr0[bx] * yt.w0 + ptr1[bx] * yt.w1 + 128) >> 8);
+            }
+            std::memcpy(dstRow, outPtr, rowBytes);
         }
     });
     return true;
@@ -669,7 +887,7 @@ bool SoftIsp::writeRgba(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t
 
 bool SoftIsp::writeYuv(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                        BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
-                       const WbCcmQ10& wc, const LockedOutput& dst) {
+                       const WbCcmQ10& wc, bool lowLightSmooth, const LockedOutput& dst) {
     if (!dst.ycbcr.y || !dst.ycbcr.cb || !dst.ycbcr.cr || dst.width <= 0 || dst.height <= 0)
         return false;
 
@@ -680,38 +898,51 @@ bool SoftIsp::writeYuv(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t 
     const size_t cStride = dst.ycbcr.cstride;
     const size_t cStep = dst.ycbcr.chroma_step;
 
-    const BayerOffsets bo = getBayerOffsets(pattern);
-    const auto xTaps = buildTapLut(cropX, cropW, dst.width, rawW);
-    const auto yTaps = buildTapLut(cropY, cropH, dst.height, rawH);
+    ensureHalfResRgb(raw, rawW, rawH, rawStrideU16, pattern, wc, lowLightSmooth);
 
-    // Pair rows (0+1, 2+3, ...) cleanly so threads never share chroma lines
+    const auto xTaps = buildCellTapLut(cropX, cropW, cachedCellW_, dst.width);
+    const auto yTaps = buildCellTapLut(cropY, cropH, cachedCellH_, dst.height);
+
     const int32_t pairRows = (dst.height + 1) / 2;
+    const int32_t halfW = (dst.width + 1) / 2;
     runParallel(pairRows, [&](int32_t py0, int32_t py1) {
         std::vector<uint8_t> yLine(static_cast<size_t>(dst.width));
-        std::vector<int> rBuf(static_cast<size_t>(dst.width));
-        std::vector<int> gBuf(static_cast<size_t>(dst.width));
-        std::vector<int> bBuf(static_cast<size_t>(dst.width));
+        std::vector<uint8_t> rBuf(static_cast<size_t>(dst.width));
+        std::vector<uint8_t> gBuf(static_cast<size_t>(dst.width));
+        std::vector<uint8_t> bBuf(static_cast<size_t>(dst.width));
 
         for (int32_t py = py0; py < py1; ++py) {
             const int32_t yTop = py * 2;
             const int32_t yBot = yTop + 1;
 
             auto processRow = [&](int32_t dy, bool accumChroma) {
-                const CachedBayerRows yr = getCachedRows(raw, rawStrideU16, bo, yTaps[dy]);
+                const CellTap1D& yt = yTaps[dy];
+                const uint32_t* s0 = previewRgb_.data() + static_cast<size_t>(yt.i0) * cachedCellW_;
+                const uint32_t* s1 = previewRgb_.data() + static_cast<size_t>(yt.i1) * cachedCellW_;
+
                 for (int32_t dx = 0; dx < dst.width; ++dx) {
-                    int lr, lg, lb, cr, cg, cb;
-                    sampleTapCell(yr, xTaps[dx], lr, lg, lb);
-                    applyWbCcm(wc, lr, lg, lb, cr, cg, cb);
+                    const CellTap1D& xt = xTaps[dx];
+                    const uint32_t p00 = s0[xt.i0];
+                    const uint32_t p10 = s0[xt.i1];
+                    const uint32_t p01 = s1[xt.i0];
+                    const uint32_t p11 = s1[xt.i1];
+                    const int w00 = (xt.w0 * yt.w0) >> 8;
+                    const int w10 = (xt.w1 * yt.w0) >> 8;
+                    const int w01 = (xt.w0 * yt.w1) >> 8;
+                    const int w11 = 256 - w00 - w10 - w01;
 
-                    uint8_t r = gammaLut_[cr];
-                    uint8_t g = gammaLut_[cg];
-                    uint8_t b = gammaLut_[cb];
+                    const int r = ((p00 & 0xFFu) * w00 + (p10 & 0xFFu) * w10 +
+                                   (p01 & 0xFFu) * w01 + (p11 & 0xFFu) * w11) >> 8;
+                    const int g = (((p00 >> 8) & 0xFFu) * w00 + ((p10 >> 8) & 0xFFu) * w10 +
+                                   ((p01 >> 8) & 0xFFu) * w01 + ((p11 >> 8) & 0xFFu) * w11) >> 8;
+                    const int b = (((p00 >> 16) & 0xFFu) * w00 + ((p10 >> 16) & 0xFFu) * w10 +
+                                   ((p01 >> 16) & 0xFFu) * w01 + ((p11 >> 16) & 0xFFu) * w11) >> 8;
 
-                    // BT.601 full range JPEG/Camera2 standard
-                    int yVal = (77 * r + 150 * g + 29 * b + 128) >> 8;
-                    yLine[dx] = clampU8(yVal);
+                    yLine[dx] = clampU8((77 * r + 150 * g + 29 * b + 128) >> 8);
                     if (accumChroma) {
-                        rBuf[dx] = r; gBuf[dx] = g; bBuf[dx] = b;
+                        rBuf[dx] = static_cast<uint8_t>(r);
+                        gBuf[dx] = static_cast<uint8_t>(g);
+                        bBuf[dx] = static_cast<uint8_t>(b);
                     }
                 }
                 std::memcpy(yPlane + static_cast<size_t>(dy) * yStride, yLine.data(),
@@ -725,7 +956,6 @@ bool SoftIsp::writeYuv(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t 
 
             uint8_t* cbRow = cbPlane + static_cast<size_t>(py) * cStride;
             uint8_t* crRow = crPlane + static_cast<size_t>(py) * cStride;
-            const int32_t halfW = (dst.width + 1) / 2;
             for (int32_t px = 0; px < halfW; ++px) {
                 const int32_t x = px * 2;
                 int r = rBuf[x];
@@ -736,12 +966,9 @@ bool SoftIsp::writeYuv(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t 
                     g = (g + gBuf[x + 1]) >> 1;
                     b = (b + bBuf[x + 1]) >> 1;
                 }
-                int cb = ((-43 * r - 85 * g + 128 * b + 128) >> 8) + 128;
-                int cr = ((128 * r - 107 * g - 21 * b + 128) >> 8) + 128;
-                cbRow[px * cStep] = clampU8(cb);
-                crRow[px * cStep] = clampU8(cr);
+                cbRow[px * cStep] = clampU8(((-43 * r - 85 * g + 128 * b + 128) >> 8) + 128);
+                crRow[px * cStep] = clampU8(((128 * r - 107 * g - 21 * b + 128) >> 8) + 128);
             }
-            chromaNrPtrRow(halfW, cbRow, crRow, cStep);
         }
     });
     return true;
@@ -756,23 +983,220 @@ bool SoftIsp::writeJpeg(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t
 
     const int32_t w = dst.width;
     const int32_t h = dst.height;
-    std::vector<uint8_t> rgb(static_cast<size_t>(w) * h * 3);
     const BayerOffsets bo = getBayerOffsets(pattern);
-    const auto xTaps = buildTapLut(cropX, cropW, w, rawW);
-    const auto yTaps = buildTapLut(cropY, cropH, h, rawH);
 
-    runParallel(h, [&](int32_t y0, int32_t y1) {
-        for (int32_t dy = y0; dy < y1; ++dy) {
-            uint8_t* rowPtr = rgb.data() + static_cast<size_t>(dy) * w * 3;
-            const CachedBayerRows yr = getCachedRows(raw, rawStrideU16, bo, yTaps[dy]);
+    std::vector<uint16_t> linRaw(static_cast<size_t>(rawW) * rawH);
+    runParallel(rawH, [&](int32_t y0, int32_t y1) {
+        for (int32_t y = y0; y < y1; ++y) {
+            uint16_t* dRow = linRaw.data() + static_cast<size_t>(y) * rawW;
+            for (int32_t x = 0; x < rawW; ++x) {
+                dRow[x] = static_cast<uint16_t>(readDpcRaw(raw, rawW, rawH, rawStrideU16, x, y));
+            }
+        }
+    });
+
+    auto pxAt = [&](int32_t x, int32_t y) -> int {
+        x = std::clamp(x, 0, rawW - 1);
+        y = std::clamp(y, 0, rawH - 1);
+        return linRaw[static_cast<size_t>(y) * rawW + x];
+    };
+
+    const int32_t srcX0 = std::clamp(static_cast<int32_t>(std::floor(cropX)) - 1, 0, rawW - 2);
+    const int32_t srcY0 = std::clamp(static_cast<int32_t>(std::floor(cropY)) - 1, 0, rawH - 2);
+    const int32_t srcX1 = std::clamp(static_cast<int32_t>(std::ceil(cropX + cropW)) + 2, srcX0 + 2, rawW);
+    const int32_t srcY1 = std::clamp(static_cast<int32_t>(std::ceil(cropY + cropH)) + 2, srcY0 + 2, rawH);
+    const int32_t boxW = srcX1 - srcX0;
+    const int32_t boxH = srcY1 - srcY0;
+
+    std::vector<uint16_t> gPlane(static_cast<size_t>(boxW) * boxH);
+    runParallel(boxH, [&](int32_t by0, int32_t by1) {
+        for (int32_t by = by0; by < by1; ++by) {
+            const int32_t sy = srcY0 + by;
+            const int py = sy & 1;
+            const bool isG0Row = (py == bo.g0y);
+            const bool isG1Row = (py == bo.g1y);
+            uint16_t* gOut = gPlane.data() + static_cast<size_t>(by) * boxW;
+            for (int32_t bx = 0; bx < boxW; ++bx) {
+                const int32_t sx = srcX0 + bx;
+                const int px = sx & 1;
+                const bool isGreen = (isG0Row && px == bo.g0x) || (isG1Row && px == bo.g1x);
+                if (isGreen) {
+                    gOut[bx] = static_cast<uint16_t>(pxAt(sx, sy));
+                } else {
+                    const int gN = pxAt(sx, sy - 1);
+                    const int gS = pxAt(sx, sy + 1);
+                    const int gW = pxAt(sx - 1, sy);
+                    const int gE = pxAt(sx + 1, sy);
+                    const int c = pxAt(sx, sy);
+                    const int dh = std::abs(gW - gE) + std::abs(2 * c - pxAt(sx - 2, sy) - pxAt(sx + 2, sy));
+                    const int dv = std::abs(gN - gS) + std::abs(2 * c - pxAt(sx, sy - 2) - pxAt(sx, sy + 2));
+                    int gVal;
+                    if (dh * 4 < dv * 3) {
+                        gVal = (gW + gE) >> 1;
+                    } else if (dv * 4 < dh * 3) {
+                        gVal = (gN + gS) >> 1;
+                    } else {
+                        gVal = (gN + gS + gW + gE) >> 2;
+                    }
+                    gOut[bx] = static_cast<uint16_t>(clamp10(gVal));
+                }
+            }
+        }
+    });
+
+    auto gBoxAt = [&](int32_t sx, int32_t sy) -> int {
+        int32_t bx = std::clamp(sx - srcX0, 0, boxW - 1);
+        int32_t by = std::clamp(sy - srcY0, 0, boxH - 1);
+        return gPlane[static_cast<size_t>(by) * boxW + bx];
+    };
+
+    std::vector<uint8_t> boxRgb(static_cast<size_t>(boxW) * boxH * 3);
+    runParallel(boxH, [&](int32_t by0, int32_t by1) {
+        for (int32_t by = by0; by < by1; ++by) {
+            const int32_t sy = srcY0 + by;
+            const int py = sy & 1;
+            uint8_t* outRow = boxRgb.data() + static_cast<size_t>(by) * boxW * 3;
+            for (int32_t bx = 0; bx < boxW; ++bx) {
+                const int32_t sx = srcX0 + bx;
+                const int px = sx & 1;
+                const int gC = gPlane[static_cast<size_t>(by) * boxW + bx];
+                int rC = gC, bC = gC;
+
+                if (px == bo.rx && py == bo.ry) {
+                    rC = pxAt(sx, sy);
+                    int db = ((pxAt(sx - 1, sy - 1) - gBoxAt(sx - 1, sy - 1)) +
+                              (pxAt(sx + 1, sy - 1) - gBoxAt(sx + 1, sy - 1)) +
+                              (pxAt(sx - 1, sy + 1) - gBoxAt(sx - 1, sy + 1)) +
+                              (pxAt(sx + 1, sy + 1) - gBoxAt(sx + 1, sy + 1))) >> 2;
+                    bC = clamp10(gC + db);
+                } else if (px == bo.bx && py == bo.by) {
+                    bC = pxAt(sx, sy);
+                    int dr = ((pxAt(sx - 1, sy - 1) - gBoxAt(sx - 1, sy - 1)) +
+                              (pxAt(sx + 1, sy - 1) - gBoxAt(sx + 1, sy - 1)) +
+                              (pxAt(sx - 1, sy + 1) - gBoxAt(sx - 1, sy + 1)) +
+                              (pxAt(sx + 1, sy + 1) - gBoxAt(sx + 1, sy + 1))) >> 2;
+                    rC = clamp10(gC + dr);
+                } else if (py == bo.ry) {
+                    int dr = ((pxAt(sx - 1, sy) - gBoxAt(sx - 1, sy)) +
+                              (pxAt(sx + 1, sy) - gBoxAt(sx + 1, sy))) >> 1;
+                    int db = ((pxAt(sx, sy - 1) - gBoxAt(sx, sy - 1)) +
+                              (pxAt(sx, sy + 1) - gBoxAt(sx, sy + 1))) >> 1;
+                    rC = clamp10(gC + dr);
+                    bC = clamp10(gC + db);
+                } else {
+                    int db = ((pxAt(sx - 1, sy) - gBoxAt(sx - 1, sy)) +
+                              (pxAt(sx + 1, sy) - gBoxAt(sx + 1, sy))) >> 1;
+                    int dr = ((pxAt(sx, sy - 1) - gBoxAt(sx, sy - 1)) +
+                              (pxAt(sx, sy + 1) - gBoxAt(sx, sy + 1))) >> 1;
+                    rC = clamp10(gC + dr);
+                    bC = clamp10(gC + db);
+                }
+
+                int cr, cg, cb;
+                applyWbCcm(wc, rC, gC, bC, cr, cg, cb);
+                outRow[bx * 3 + 0] = gammaLut_[cr];
+                outRow[bx * 3 + 1] = gammaLut_[cg];
+                outRow[bx * 3 + 2] = gammaLut_[cb];
+            }
+        }
+    });
+    gPlane.clear();
+    gPlane.shrink_to_fit();
+    linRaw.clear();
+    linRaw.shrink_to_fit();
+
+    std::vector<uint8_t> rgb(static_cast<size_t>(w) * h * 3);
+    const float stepX = cropW / std::max(1, w);
+    const float stepY = cropH / std::max(1, h);
+    runParallel(h, [&](int32_t dy0, int32_t dy1) {
+        for (int32_t dy = dy0; dy < dy1; ++dy) {
+            const float fy = (cropY + (dy + 0.5f) * stepY) - static_cast<float>(srcY0) - 0.5f;
+            const int32_t iy0 = std::clamp(static_cast<int32_t>(std::floor(fy)), 0, boxH - 2);
+            const int32_t iy1 = iy0 + 1;
+            const int32_t wy1 = std::clamp(static_cast<int32_t>((fy - iy0) * 256.0f + 0.5f), 0, 256);
+            const int32_t wy0 = 256 - wy1;
+            const uint8_t* r0 = boxRgb.data() + static_cast<size_t>(iy0) * boxW * 3;
+            const uint8_t* r1 = boxRgb.data() + static_cast<size_t>(iy1) * boxW * 3;
+            uint8_t* dRow = rgb.data() + static_cast<size_t>(dy) * w * 3;
+
             for (int32_t dx = 0; dx < w; ++dx) {
-                int lr, lg, lb, cr, cg, cb;
-                sampleTapCell(yr, xTaps[dx], lr, lg, lb);
-                applyWbCcm(wc, lr, lg, lb, cr, cg, cb);
+                const float fx = (cropX + (dx + 0.5f) * stepX) - static_cast<float>(srcX0) - 0.5f;
+                const int32_t ix0 = std::clamp(static_cast<int32_t>(std::floor(fx)), 0, boxW - 2);
+                const int32_t ix1 = ix0 + 1;
+                const int32_t wx1 = std::clamp(static_cast<int32_t>((fx - ix0) * 256.0f + 0.5f), 0, 256);
+                const int32_t wx0 = 256 - wx1;
+                const int32_t w00 = (wx0 * wy0) >> 8;
+                const int32_t w10 = (wx1 * wy0) >> 8;
+                const int32_t w01 = (wx0 * wy1) >> 8;
+                const int32_t w11 = 256 - w00 - w10 - w01;
+                for (int c = 0; c < 3; ++c) {
+                    int val = (r0[ix0 * 3 + c] * w00 + r0[ix1 * 3 + c] * w10 +
+                               r1[ix0 * 3 + c] * w01 + r1[ix1 * 3 + c] * w11 + 128) >> 8;
+                    dRow[dx * 3 + c] = clampU8(val);
+                }
+            }
+        }
+    });
+    boxRgb.clear();
+    boxRgb.shrink_to_fit();
 
-                rowPtr[dx * 3 + 0] = gammaLut_[cr];
-                rowPtr[dx * 3 + 1] = gammaLut_[cg];
-                rowPtr[dx * 3 + 2] = gammaLut_[cb];
+    const size_t totalPx = static_cast<size_t>(w) * h;
+    std::vector<uint8_t> yPlane(totalPx);
+    std::vector<uint8_t> cbPlane(totalPx);
+    std::vector<uint8_t> crPlane(totalPx);
+
+    runParallel(h, [&](int32_t dy0, int32_t dy1) {
+        std::vector<uint8_t> cbTmp(static_cast<size_t>(w));
+        std::vector<uint8_t> crTmp(static_cast<size_t>(w));
+        for (int32_t dy = dy0; dy < dy1; ++dy) {
+            const uint8_t* sRow = rgb.data() + static_cast<size_t>(dy) * w * 3;
+            uint8_t* yRow = yPlane.data() + static_cast<size_t>(dy) * w;
+            uint8_t* cbRow = cbPlane.data() + static_cast<size_t>(dy) * w;
+            uint8_t* crRow = crPlane.data() + static_cast<size_t>(dy) * w;
+            for (int32_t dx = 0; dx < w; ++dx) {
+                const int r = sRow[dx * 3 + 0];
+                const int g = sRow[dx * 3 + 1];
+                const int b = sRow[dx * 3 + 2];
+                yRow[dx] = clampU8((77 * r + 150 * g + 29 * b + 128) >> 8);
+                cbRow[dx] = clampU8(((-43 * r - 85 * g + 128 * b + 128) >> 8) + 128);
+                crRow[dx] = clampU8(((128 * r - 107 * g - 21 * b + 128) >> 8) + 128);
+            }
+            chromaNrPtrRow(w, cbRow, crRow, 1, cbTmp.data(), crTmp.data());
+        }
+    });
+
+    runParallel(w, [&](int32_t dx0, int32_t dx1) {
+        std::vector<uint8_t> cbTmp(static_cast<size_t>(h));
+        std::vector<uint8_t> crTmp(static_cast<size_t>(h));
+        for (int32_t dx = dx0; dx < dx1; ++dx) {
+            chromaNrPtrRow(h, cbPlane.data() + dx, crPlane.data() + dx, static_cast<size_t>(w),
+                           cbTmp.data(), crTmp.data());
+        }
+    });
+
+    runParallel(h, [&](int32_t dy0, int32_t dy1) {
+        for (int32_t dy = dy0; dy < dy1; ++dy) {
+            uint8_t* dRow = rgb.data() + static_cast<size_t>(dy) * w * 3;
+            const uint8_t* yRow = yPlane.data() + static_cast<size_t>(dy) * w;
+            const uint8_t* cbRow = cbPlane.data() + static_cast<size_t>(dy) * w;
+            const uint8_t* crRow = crPlane.data() + static_cast<size_t>(dy) * w;
+            const uint8_t* yUp = (dy > 0) ? (yRow - w) : yRow;
+            const uint8_t* yDn = (dy + 1 < h) ? (yRow + w) : yRow;
+
+            for (int32_t dx = 0; dx < w; ++dx) {
+                int y = yRow[dx];
+                if (dx > 0 && dx + 1 < w && dy > 0 && dy + 1 < h) {
+                    const int blur = (yRow[dx - 1] + yRow[dx + 1] + yUp[dx] + yDn[dx] + 4 * y) >> 3;
+                    const int diff = y - blur;
+                    if (std::abs(diff) > 6) {
+                        y = clampU8(y + (diff >> 2));
+                    }
+                }
+                const int c = static_cast<int>(cbRow[dx]) - 128;
+                const int d = static_cast<int>(crRow[dx]) - 128;
+                dRow[dx * 3 + 0] = clampU8(y + ((359 * d) >> 8));
+                dRow[dx * 3 + 1] = clampU8(y - ((88 * c + 183 * d) >> 8));
+                dRow[dx * 3 + 2] = clampU8(y + ((454 * c) >> 8));
             }
         }
     });
@@ -846,7 +1270,18 @@ double computeFocusSharpness(const uint16_t* raw, int32_t rawW, int32_t rawH, in
         int mapY0 = static_cast<int>(static_cast<int64_t>(params.afY) * rawH / activeH);
         int mapX1 = static_cast<int>(static_cast<int64_t>(params.afX + params.afW) * rawW / activeW);
         int mapY1 = static_cast<int>(static_cast<int64_t>(params.afY + params.afH) * rawH / activeH);
-        if (mapX1 - mapX0 >= 64 && mapY1 - mapY0 >= 64) {
+        if (mapX1 - mapX0 >= 24 && mapY1 - mapY0 >= 24) {
+            const int minWin = 128;
+            if (mapX1 - mapX0 < minWin) {
+                const int cx = (mapX0 + mapX1) / 2;
+                mapX0 = cx - minWin / 2;
+                mapX1 = cx + minWin / 2;
+            }
+            if (mapY1 - mapY0 < minWin) {
+                const int cy = (mapY0 + mapY1) / 2;
+                mapY0 = cy - minWin / 2;
+                mapY1 = cy + minWin / 2;
+            }
             rx0 = mapX0;
             ry0 = mapY0;
             rx1 = mapX1;
@@ -863,19 +1298,19 @@ double computeFocusSharpness(const uint16_t* raw, int32_t rawW, int32_t rawH, in
     double lumaSum = 0.0;
     int64_t samples = 0;
 
-    for (int y = ry0; y < ry1 - 4; y += 4) {
+    for (int y = ry0; y < ry1 - 4; y += 2) {
         const int row0 = (y + bo.g0y) * strideU16 + bo.g0x;
         const int rowNext = (y + 2 + bo.g0y) * strideU16 + bo.g0x;
-        for (int x = rx0; x < rx1 - 4; x += 4) {
+        for (int x = rx0; x < rx1 - 4; x += 2) {
             int g = static_cast<int>(raw[row0 + x] & 0x3FF) - kBlackLevel;
             int gx = static_cast<int>(raw[row0 + x + 2] & 0x3FF) - kBlackLevel;
             int gy = static_cast<int>(raw[rowNext + x] & 0x3FF) - kBlackLevel;
             if (g < 0) g = 0;
             if (gx < 0) gx = 0;
             if (gy < 0) gy = 0;
-            double dx = static_cast<double>(gx - g);
-            double dy = static_cast<double>(gy - g);
-            gradSum += dx * dx + dy * dy;
+            const int adx = std::max(0, std::abs(gx - g) - 10);
+            const int ady = std::max(0, std::abs(gy - g) - 10);
+            gradSum += static_cast<double>(adx * adx + ady * ady);
             lumaSum += static_cast<double>(g);
             ++samples;
         }

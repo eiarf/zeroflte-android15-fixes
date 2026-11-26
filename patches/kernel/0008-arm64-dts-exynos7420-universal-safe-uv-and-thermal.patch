@@ -1,0 +1,281 @@
+diff --git a/arch/arm64/boot/dts/exynos/exynos7-trip-points.dtsi b/arch/arm64/boot/dts/exynos/exynos7-trip-points.dtsi
+index 18a5cfd24..9ab77533c 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7-trip-points.dtsi
++++ b/arch/arm64/boot/dts/exynos/exynos7-trip-points.dtsi
+@@ -8,37 +8,37 @@
+ 
+ trips {
+ 	cpu_alert0: cpu-alert-0 {
+-		temperature = <75000>; /* millicelsius */
+-		hysteresis = <10000>; /* millicelsius */
++		temperature = <64000>; /* millicelsius */
++		hysteresis = <4000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert1: cpu-alert-1 {
+-		temperature = <80000>; /* millicelsius */
+-		hysteresis = <10000>; /* millicelsius */
++		temperature = <70000>; /* millicelsius */
++		hysteresis = <4000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert2: cpu-alert-2 {
+-		temperature = <85000>; /* millicelsius */
+-		hysteresis = <10000>; /* millicelsius */
++		temperature = <76000>; /* millicelsius */
++		hysteresis = <4000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert3: cpu-alert-3 {
+-		temperature = <90000>; /* millicelsius */
+-		hysteresis = <10000>; /* millicelsius */
++		temperature = <82000>; /* millicelsius */
++		hysteresis = <5000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert4: cpu-alert-4 {
+-		temperature = <95000>; /* millicelsius */
+-		hysteresis = <10000>; /* millicelsius */
++		temperature = <88000>; /* millicelsius */
++		hysteresis = <5000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert5: cpu-alert-5 {
+-		temperature = <100000>; /* millicelsius */
+-		hysteresis = <10000>; /* millicelsius */
++		temperature = <95000>; /* millicelsius */
++		hysteresis = <5000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert6: cpu-alert-6 {
+-		temperature = <110000>; /* millicelsius */
++		temperature = <105000>; /* millicelsius */
+ 		hysteresis = <10000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+diff --git a/arch/arm64/boot/dts/exynos/exynos7.dtsi b/arch/arm64/boot/dts/exynos/exynos7.dtsi
+index 1be4a5ced..e3da140c5 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7.dtsi
++++ b/arch/arm64/boot/dts/exynos/exynos7.dtsi
+@@ -250,77 +250,77 @@ cpu_atlas_opp_table: opp-table-atlas {
+ 
+ 		opp-800000000 {
+ 			opp-hz = /bits/ 64 <800000000>;
+-			opp-microvolt = <825000>;
++			opp-microvolt = <781250>;
+ 			opp-microwatt = <261750>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-900000000 {
+ 			opp-hz = /bits/ 64 <900000000>;
+-			opp-microvolt = <850000>;
++			opp-microvolt = <800000>;
+ 			opp-microwatt = <304500>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1000000000 {
+ 			opp-hz = /bits/ 64 <1000000000>;
+-			opp-microvolt = <875000>;
++			opp-microvolt = <818750>;
+ 			opp-microwatt = <359500>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1100000000 {
+ 			opp-hz = /bits/ 64 <1100000000>;
+-			opp-microvolt = <900000>;
++			opp-microvolt = <843750>;
+ 			opp-microwatt = <428250>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1200000000 {
+ 			opp-hz = /bits/ 64 <1200000000>;
+-			opp-microvolt = <925000>;
++			opp-microvolt = <868750>;
+ 			opp-microwatt = <493250>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1300000000 {
+ 			opp-hz = /bits/ 64 <1300000000>;
+-			opp-microvolt = <950000>;
++			opp-microvolt = <887500>;
+ 			opp-microwatt = <563250>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1400000000 {
+ 			opp-hz = /bits/ 64 <1400000000>;
+-			opp-microvolt = <981250>;
++			opp-microvolt = <912500>;
+ 			opp-microwatt = <654000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1500000000 {
+ 			opp-hz = /bits/ 64 <1500000000>;
+-			opp-microvolt = <1012500>;
++			opp-microvolt = <937500>;
+ 			opp-microwatt = <737000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1600000000 {
+ 			opp-hz = /bits/ 64 <1600000000>;
+-			opp-microvolt = <1043750>;
++			opp-microvolt = <968750>;
+ 			opp-microwatt = <855000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1704000000 {
+ 			opp-hz = /bits/ 64 <1704000000>;
+-			opp-microvolt = <1081250>;
++			opp-microvolt = <1000000>;
+ 			opp-microwatt = <989750>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1800000000 {
+ 			opp-hz = /bits/ 64 <1800000000>;
+-			opp-microvolt = <1118750>;
++			opp-microvolt = <1031250>;
+ 			opp-microwatt = <1156750>;
+ 			clock-latency-ns = <500000>;
+ 		};
+@@ -1508,51 +1508,64 @@ atlas_thermal: exynos-therm {
+ 
+ 			cooling-maps {
+ 				map0 {
+-					/* 75 C: A57 1704 MHz */
++					/* 64 C: A57 1400 MHz */
+ 					trip = <&cpu_alert0>;
+-					cooling-device = <&cpu_atlas0 1 1>,
+-						 <&cpu_atlas1 1 1>,
+-						 <&cpu_atlas2 1 1>,
+-						 <&cpu_atlas3 1 1>;
++					cooling-device = <&cpu_atlas0 4 4>,
++						 <&cpu_atlas1 4 4>,
++						 <&cpu_atlas2 4 4>,
++						 <&cpu_atlas3 4 4>;
+ 				};
+ 				map1 {
+-					/* 80 C: A57 1300 MHz, A53 1400 MHz, GPU 544 MHz */
++					/* 70 C: A57 1200 MHz, A53 1400 MHz, GPU 600 MHz */
+ 					trip = <&cpu_alert1>;
+-					cooling-device = <&cpu_atlas0 5 5>,
+-						 <&cpu_atlas1 5 5>,
+-						 <&cpu_atlas2 5 5>,
+-						 <&cpu_atlas3 5 5>,
++					cooling-device = <&cpu_atlas0 6 6>,
++						 <&cpu_atlas1 6 6>,
++						 <&cpu_atlas2 6 6>,
++						 <&cpu_atlas3 6 6>,
+ 						 <&cpu_apollo0 1 1>,
+ 						 <&cpu_apollo1 1 1>,
+ 						 <&cpu_apollo2 1 1>,
+ 						 <&cpu_apollo3 1 1>,
+-						 <&gpu 2 2>;
++						 <&gpu 1 1>;
+ 				};
+ 				map2 {
+-					/* 85 C: A57 800 MHz, A53 1200 MHz, GPU 420 MHz */
++					/* 76 C: A57 1000 MHz, A53 1296 MHz, GPU 544 MHz */
+ 					trip = <&cpu_alert2>;
++					cooling-device = <&cpu_atlas0 8 8>,
++						 <&cpu_atlas1 8 8>,
++						 <&cpu_atlas2 8 8>,
++						 <&cpu_atlas3 8 8>,
++						 <&cpu_apollo0 2 2>,
++						 <&cpu_apollo1 2 2>,
++						 <&cpu_apollo2 2 2>,
++						 <&cpu_apollo3 2 2>,
++						 <&gpu 2 2>;
++				};
++				map3 {
++					/* 82 C: A57 800 MHz, A53 1104 MHz, GPU 420 MHz */
++					trip = <&cpu_alert3>;
+ 					cooling-device = <&cpu_atlas0 10 10>,
+ 						 <&cpu_atlas1 10 10>,
+ 						 <&cpu_atlas2 10 10>,
+ 						 <&cpu_atlas3 10 10>,
+-						 <&cpu_apollo0 3 3>,
+-						 <&cpu_apollo1 3 3>,
+-						 <&cpu_apollo2 3 3>,
+-						 <&cpu_apollo3 3 3>,
++						 <&cpu_apollo0 4 4>,
++						 <&cpu_apollo1 4 4>,
++						 <&cpu_apollo2 4 4>,
++						 <&cpu_apollo3 4 4>,
+ 						 <&gpu 3 3>;
+ 				};
+-				map3 {
+-					/* 90 C: A53 1000 MHz, GPU 266 MHz */
+-					trip = <&cpu_alert3>;
+-					cooling-device = <&cpu_apollo0 5 5>,
+-						 <&cpu_apollo1 5 5>,
+-						 <&cpu_apollo2 5 5>,
+-						 <&cpu_apollo3 5 5>,
++				map4 {
++					/* 88 C: A53 900 MHz, GPU 266 MHz */
++					trip = <&cpu_alert4>;
++					cooling-device = <&cpu_apollo0 6 6>,
++						 <&cpu_apollo1 6 6>,
++						 <&cpu_apollo2 6 6>,
++						 <&cpu_apollo3 6 6>,
+ 						 <&gpu 5 5>;
+ 				};
+-				map4 {
++				map5 {
+ 					/* 95 C: A53 400 MHz */
+-					trip = <&cpu_alert4>;
++					trip = <&cpu_alert5>;
+ 					cooling-device = <&cpu_apollo0 11 11>,
+ 						 <&cpu_apollo1 11 11>,
+ 						 <&cpu_apollo2 11 11>,
+diff --git a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+index 3575302f6..aafd1282a 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
++++ b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+@@ -1263,32 +1263,32 @@ gpu_opp_table: opp-table {
+ 
+ 		opp-266000000 {
+ 			opp-hz = /bits/ 64 <266000000>;
+-			opp-microvolt = <762500>;
++			opp-microvolt = <750000>;
+ 		};
+ 
+ 		opp-350000000 {
+ 			opp-hz = /bits/ 64 <350000000>;
+-			opp-microvolt = <768750>;
++			opp-microvolt = <756250>;
+ 		};
+ 
+ 		opp-420000000 {
+ 			opp-hz = /bits/ 64 <420000000>;
+-			opp-microvolt = <775000>;
++			opp-microvolt = <762500>;
+ 		};
+ 
+ 		opp-544000000 {
+ 			opp-hz = /bits/ 64 <544000000>;
+-			opp-microvolt = <812500>;
++			opp-microvolt = <800000>;
+ 		};
+ 
+ 		opp-600000000 {
+ 			opp-hz = /bits/ 64 <600000000>;
+-			opp-microvolt = <850000>;
++			opp-microvolt = <837500>;
+ 		};
+ 
+ 		opp-700000000 {
+ 			opp-hz = /bits/ 64 <700000000>;
+-			opp-microvolt = <893750>;
++			opp-microvolt = <881250>;
+ 		};
+ 	};
+ };

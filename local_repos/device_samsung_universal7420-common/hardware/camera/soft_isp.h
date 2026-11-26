@@ -100,6 +100,7 @@ private:
     bool initialized_ = false;
     double exposureValue_ = 0.0;  // combined linear EV proxy = exposureLines * (again/32) * (dgain/256)
     int32_t aeHoldFrames_ = 0;
+    int32_t wbFrames_ = 0;
 };
 
 /**
@@ -126,13 +127,16 @@ private:
     void initGammaLut();
     void runParallel(int32_t height, const std::function<void(int32_t, int32_t)>& fn);
 
+    void ensureHalfResRgb(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
+                          BayerPattern pattern, const WbCcmQ10& wc, bool lowLightSmooth);
+
     bool writeRgba(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                    BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
-                   const WbCcmQ10& wc, const LockedOutput& dst);
+                   const WbCcmQ10& wc, bool lowLightSmooth, const LockedOutput& dst);
 
     bool writeYuv(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                   BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
-                  const WbCcmQ10& wc, const LockedOutput& dst);
+                  const WbCcmQ10& wc, bool lowLightSmooth, const LockedOutput& dst);
 
     bool writeJpeg(const uint16_t* raw, int32_t rawW, int32_t rawH, int32_t rawStrideU16,
                    BayerPattern pattern, float cropX, float cropY, float cropW, float cropH,
@@ -141,7 +145,12 @@ private:
 
     std::array<uint8_t, 1024> gammaLut_{};
     std::vector<uint16_t> cachedRaw_;
+    std::vector<uint32_t> previewRgb_;
     int32_t stagedW_ = 0;
+    const uint16_t* demosaicSrc_ = nullptr;
+    int32_t cachedCellW_ = 0;
+    int32_t cachedCellH_ = 0;
+    bool demosaicValid_ = false;
 
     std::vector<std::thread> workers_;
     std::mutex poolMtx_;

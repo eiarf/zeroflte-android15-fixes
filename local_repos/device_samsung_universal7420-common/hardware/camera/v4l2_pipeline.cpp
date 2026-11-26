@@ -63,13 +63,6 @@ inline uint64_t devKey(uint32_t maj, uint32_t min) {
     return (static_cast<uint64_t>(maj) << 32) | min;
 }
 
-struct DiscoveredMedia {
-    std::string mediaPath;
-    bool hasRear = false;
-    bool hasFront = false;
-    V4l2DeviceNodes node;
-};
-
 bool inspectMediaDevice(const std::string& mediaPath,
                         const std::unordered_map<uint64_t, std::string>& videoNodes,
                         const std::unordered_map<uint64_t, std::string>& subdevNodes,
@@ -102,6 +95,7 @@ bool inspectMediaDevice(const std::string& mediaPath,
             if (it != subdevNodes.end()) {
                 n.sensorSubdev = it->second;
                 n.sensorName = ent.name;
+                n.sensorEntityId = ent.id;
                 n.isFront = false;
                 n.cameraId = 0;
                 n.pattern = BayerPattern::GRBG;
@@ -118,6 +112,7 @@ bool inspectMediaDevice(const std::string& mediaPath,
             if (it != subdevNodes.end()) {
                 n.sensorSubdev = it->second;
                 n.sensorName = ent.name;
+                n.sensorEntityId = ent.id;
                 n.isFront = true;
                 n.cameraId = 1;
                 n.pattern = BayerPattern::GRBG;
@@ -133,12 +128,14 @@ bool inspectMediaDevice(const std::string& mediaPath,
             auto it = subdevNodes.find(dk);
             if (it != subdevNodes.end()) {
                 n.csisSubdev = it->second;
+                n.csisEntityId = ent.id;
                 foundCsis = true;
             }
         } else if (std::strstr(ent.name, ".fimc-lite") != nullptr) {
             auto it = videoNodes.find(dk);
             if (it != videoNodes.end()) {
                 n.videoDev = it->second;
+                n.videoEntityId = ent.id;
                 foundVideo = true;
             }
         } else if (ent.type == MEDIA_ENT_T_V4L2_SUBDEV_LENS ||
@@ -146,6 +143,7 @@ bool inspectMediaDevice(const std::string& mediaPath,
             auto it = subdevNodes.find(dk);
             if (it != subdevNodes.end()) {
                 n.lensSubdev = it->second;
+                n.lensEntityId = ent.id;
             }
         }
     }
@@ -189,9 +187,11 @@ std::vector<V4l2DeviceNodes> discoverV4l2Cameras() {
             if (!n.isFront && n.lensSubdev.empty() && !fallbackLens.empty()) {
                 n.lensSubdev = fallbackLens;
             }
-            ALOGI("Discovered camera %d (%s): media=%s sensor=%s csis=%s video=%s lens=%s",
+            ALOGI("Discovered camera %d (%s): media=%s sensor=%s(id=%u) csis=%s(id=%u) video=%s(id=%u) lens=%s",
                   n.cameraId, n.sensorName.c_str(), n.mediaDev.c_str(),
-                  n.sensorSubdev.c_str(), n.csisSubdev.c_str(), n.videoDev.c_str(),
+                  n.sensorSubdev.c_str(), n.sensorEntityId,
+                  n.csisSubdev.c_str(), n.csisEntityId,
+                  n.videoDev.c_str(), n.videoEntityId,
                   n.lensSubdev.empty() ? "none" : n.lensSubdev.c_str());
             found.push_back(n);
         }
@@ -245,6 +245,7 @@ void V4l2Pipeline::closeNodes() {
         oisActive_ = false;
     }
     stopStream();
+    disableMediaLinks();
     auto closeFd = [](int& fd) {
         if (fd >= 0) {
             close(fd);
@@ -258,15 +259,22 @@ void V4l2Pipeline::closeNodes() {
     closeFd(mediaFd_);
 }
 
-bool V4l2Pipeline::enableMediaLinks() {
+bool V4l2Pipeline::setPipelineLinks(bool enable) {
     if (mediaFd_ < 0) return false;
+    auto isOwnEntity = [&](uint32_t id) {
+        return id != 0 && (id == nodes_.sensorEntityId ||
+                           id == nodes_.csisEntityId ||
+                           id == nodes_.videoEntityId ||
+                           id == nodes_.lensEntityId);
+    };
+
     uint32_t eid = 0;
     while (true) {
         struct media_entity_desc ent{};
         ent.id = eid | MEDIA_ENT_ID_FLAG_NEXT;
         if (xioctl(mediaFd_, MEDIA_IOC_ENUM_ENTITIES, &ent) < 0) break;
         eid = ent.id;
-        if (ent.links == 0) continue;
+        if (ent.links == 0 || !isOwnEntity(ent.id)) continue;
 
         std::vector<struct media_link_desc> links(ent.links);
         std::vector<struct media_pad_desc> pads(ent.pads);
@@ -277,15 +285,33 @@ bool V4l2Pipeline::enableMediaLinks() {
         if (xioctl(mediaFd_, MEDIA_IOC_ENUM_LINKS, &le) < 0) continue;
 
         for (auto link : links) {
-            if (!(link.flags & MEDIA_LNK_FL_IMMUTABLE) && !(link.flags & MEDIA_LNK_FL_ENABLED)) {
+            if (link.flags & MEDIA_LNK_FL_IMMUTABLE) continue;
+            if (!isOwnEntity(link.source.entity) || !isOwnEntity(link.sink.entity)) continue;
+            const bool isEnabled = (link.flags & MEDIA_LNK_FL_ENABLED) != 0;
+            if (enable && !isEnabled) {
                 link.flags |= MEDIA_LNK_FL_ENABLED;
                 if (xioctl(mediaFd_, MEDIA_IOC_SETUP_LINK, &link) < 0) {
-                    ALOGW("MEDIA_IOC_SETUP_LINK failed: %s", strerror(errno));
+                    ALOGW("MEDIA_IOC_SETUP_LINK(enable %u->%u) failed: %s",
+                          link.source.entity, link.sink.entity, strerror(errno));
+                }
+            } else if (!enable && isEnabled) {
+                link.flags &= ~MEDIA_LNK_FL_ENABLED;
+                if (xioctl(mediaFd_, MEDIA_IOC_SETUP_LINK, &link) < 0) {
+                    ALOGW("MEDIA_IOC_SETUP_LINK(disable %u->%u) failed: %s",
+                          link.source.entity, link.sink.entity, strerror(errno));
                 }
             }
         }
     }
     return true;
+}
+
+bool V4l2Pipeline::enableMediaLinks() {
+    return setPipelineLinks(true);
+}
+
+bool V4l2Pipeline::disableMediaLinks() {
+    return setPipelineLinks(false);
 }
 
 bool V4l2Pipeline::setSubdevPadFormat(int fd, uint32_t pad, int32_t width, int32_t height, uint32_t code) {
@@ -384,7 +410,6 @@ bool V4l2Pipeline::startStream(int32_t width, int32_t height, uint32_t reqBufCou
     lastAgain_ = -1;
     lastDgain_ = -1;
     if (!nodes_.isFront && !oisActive_) {
-        // Companion/sensor MCLK & rails are live once STREAMON succeeds
         oisActive_ = writeOisSysfs("1");
     }
     ALOGI("Started stream cam%d %dx%d stride=%d bufs=%u", nodes_.cameraId, curW_, curH_,
@@ -508,7 +533,7 @@ bool V4l2Pipeline::getFocusRange(int32_t* minVal, int32_t* maxVal) {
     return true;
 }
 
-bool V4l2Pipeline::dequeueFrame(RawFrameView* outFrame, int timeoutMs) {
+bool V4l2Pipeline::dequeueFrame(RawFrameView* outFrame, int timeoutMs, bool dropStale) {
     if (!streaming_ || videoFd_ < 0 || !outFrame) return false;
 
     struct pollfd pfd{};
@@ -528,6 +553,28 @@ bool V4l2Pipeline::dequeueFrame(RawFrameView* outFrame, int timeoutMs) {
         return false;
     }
     if (buf.index >= buffers_.size()) return false;
+
+    // Drain any newer ready buffers so preview shows minimal real-world latency
+    if (dropStale) {
+        for (int drained = 0; drained < 8; ++drained) {
+            struct pollfd npfd{};
+            npfd.fd = videoFd_;
+            npfd.events = POLLIN;
+            if (poll(&npfd, 1, 0) <= 0 || !(npfd.revents & POLLIN)) break;
+
+            struct v4l2_buffer nbuf{};
+            nbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            nbuf.memory = V4L2_MEMORY_MMAP;
+            if (xioctl(videoFd_, VIDIOC_DQBUF, &nbuf) < 0) break;
+            if (nbuf.index < buffers_.size()) {
+                requeueFrame(buf.index);
+                buf = nbuf;
+            } else {
+                requeueFrame(nbuf.index);
+                break;
+            }
+        }
+    }
 
     outFrame->data = static_cast<const uint16_t*>(buffers_[buf.index].ptr);
     outFrame->width = curW_;

@@ -16,7 +16,7 @@ struct V4l2DeviceNodes {
     std::string videoDev;
     std::string csisSubdev;
     std::string sensorSubdev;
-    std::string lensSubdev;  // Optional AF VCM subdev (e.g., ak7345)
+    std::string lensSubdev;  // Optional AF VCM subdev (e.g., ak7375)
     BayerPattern pattern = BayerPattern::GRBG;
     uint32_t mbusCode = 0;
     uint32_t v4l2PixFmt = 0;
@@ -24,6 +24,10 @@ struct V4l2DeviceNodes {
     int32_t previewHeight = 1500;
     int32_t fullWidth = 5328;
     int32_t fullHeight = 3000;
+    uint32_t sensorEntityId = 0;
+    uint32_t csisEntityId = 0;
+    uint32_t videoEntityId = 0;
+    uint32_t lensEntityId = 0;
 };
 
 struct RawFrameView {
@@ -69,7 +73,7 @@ public:
     bool setFocusPos(int32_t focusPos);
     bool getFocusRange(int32_t* minVal, int32_t* maxVal);
 
-    bool dequeueFrame(RawFrameView* outFrame, int timeoutMs = 2000);
+    bool dequeueFrame(RawFrameView* outFrame, int timeoutMs = 2000, bool dropStale = true);
     bool requeueFrame(uint32_t bufferIndex);
 
 private:
@@ -78,7 +82,9 @@ private:
         size_t length = 0;
     };
 
+    bool setPipelineLinks(bool enable);
     bool enableMediaLinks();
+    bool disableMediaLinks();
     bool setSubdevPadFormat(int fd, uint32_t pad, int32_t width, int32_t height, uint32_t code);
     bool queryCtrl(int fd, uint32_t cid, int64_t* minV, int64_t* maxV, int64_t* defV, int64_t* curV);
     bool setCtrl(int fd, uint32_t cid, int32_t val);

@@ -117,6 +117,13 @@ private:
         std::vector<int32_t> candidates;
         int32_t pendingPos = -1;
         int32_t settleHold = 0;
+        int64_t moveCmdNs = 0;
+        int32_t waitFrames = 0;
+        bool lastHasAfReg = false;
+        int32_t lastAfX = 0;
+        int32_t lastAfY = 0;
+        int32_t lastAfW = 0;
+        int32_t lastAfH = 0;
         double refScore = 0.0;
         int32_t postLockSettle = 0;
         int32_t sceneShiftCount = 0;
@@ -148,6 +155,11 @@ private:
     AfState af_{};
     bool flashTorchActive_ = false;
     uint8_t lastFlashState_ = 0;
+    uint32_t perfFrames_ = 0;
+    int64_t perfWindowStartNs_ = 0;
+    int64_t perfDeqSumNs_ = 0;
+    int64_t perfStageSumNs_ = 0;
+    int64_t perfIspSumNs_ = 0;
 
     std::unique_ptr<MetadataQueue> requestQueue_;
     std::unique_ptr<MetadataQueue> resultQueue_;

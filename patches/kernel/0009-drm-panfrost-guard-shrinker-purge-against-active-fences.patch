@@ -1,0 +1,36 @@
+diff --git a/drivers/gpu/drm/panfrost/panfrost_gem_shrinker.c b/drivers/gpu/drm/panfrost/panfrost_gem_shrinker.c
+index 6a71a2555..bad968707 100644
+--- a/drivers/gpu/drm/panfrost/panfrost_gem_shrinker.c
++++ b/drivers/gpu/drm/panfrost/panfrost_gem_shrinker.c
+@@ -6,6 +6,7 @@
+  * Author: Rob Clark <robdclark@gmail.com>
+  */
+ 
++#include <linux/dma-resv.h>
+ #include <linux/list.h>
+ 
+ #include <drm/drm_device.h>
+@@ -42,7 +43,7 @@ static bool panfrost_gem_purge(struct drm_gem_object *obj)
+ 	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
+ 	bool ret = false;
+ 
+-	if (atomic_read(&bo->gpu_usecount))
++	if (obj->import_attach || atomic_read(&bo->gpu_usecount))
+ 		return false;
+ 
+ 	if (!mutex_trylock(&bo->mappings.lock))
+@@ -51,10 +52,14 @@ static bool panfrost_gem_purge(struct drm_gem_object *obj)
+ 	if (!dma_resv_trylock(shmem->base.resv))
+ 		goto unlock_mappings;
+ 
++	if (!dma_resv_test_signaled(shmem->base.resv, DMA_RESV_USAGE_BOOKKEEP))
++		goto unlock_resv;
++
+ 	panfrost_gem_teardown_mappings_locked(bo);
+ 	drm_gem_shmem_purge(&bo->base);
+ 	ret = true;
+ 
++unlock_resv:
+ 	dma_resv_unlock(shmem->base.resv);
+ 
+ unlock_mappings:
