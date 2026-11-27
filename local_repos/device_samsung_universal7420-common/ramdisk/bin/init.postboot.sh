@@ -66,4 +66,4 @@ if [ -f /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq ]; then
 fi
 
 # Keep Exynos7420 s2idle deep sleep active
-echo s2idle > /sys/power/mem_sleep 2>/dev/null || true
+echo deep > /sys/power/mem_sleep 2>/dev/null || true

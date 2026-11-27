@@ -210,9 +210,16 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
 	vendor.lineage.health-service.default
 
-# Media profile
+# Media & Hardware Video Codec2 (Exynos MFC v9 via v4l2_codec2)
+PRODUCT_PACKAGES += \
+	android.hardware.media.c2-service-v4l2 \
+	libc2plugin_store
+
 PRODUCT_COPY_FILES += \
-	$(COMMON_PATH)/configs/media/media_profiles_V1_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_V1_0.xml
+	$(COMMON_PATH)/configs/media/media_profiles_V1_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_V1_0.xml \
+	$(COMMON_PATH)/configs/media/media_codecs_c2.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_c2.xml \
+	$(COMMON_PATH)/configs/seccomp_policy/android.hardware.media.c2-extended-seccomp_policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/android.hardware.media.c2-extended-seccomp_policy \
+	$(COMMON_PATH)/prebuilt/firmware/mfc_fw.bin:$(TARGET_COPY_OUT_VENDOR)/firmware/mfc_fw.bin
 
 # Network
 PRODUCT_PACKAGES += \
@@ -381,7 +388,8 @@ PRODUCT_SOONG_NAMESPACES += \
 	hardware/google/pixel/power-libperfmgr \
 	hardware/google/pixel/pixelstats \
 	hardware/google/pixel/thermal \
-	hardware/samsung_slsi-linaro/exynos/cpboot
+	hardware/samsung_slsi-linaro/exynos/cpboot \
+	external/v4l2_codec2
 
 # Stagefright shim
 PRODUCT_PACKAGES += \

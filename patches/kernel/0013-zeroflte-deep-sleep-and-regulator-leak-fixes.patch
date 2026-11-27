@@ -1,0 +1,190 @@
+diff --git a/drivers/input/misc/max77693-haptic.c b/drivers/input/misc/max77693-haptic.c
+index edc42621d..1317dd5f2 100644
+--- a/drivers/input/misc/max77693-haptic.c
++++ b/drivers/input/misc/max77693-haptic.c
+@@ -173,11 +173,22 @@ static void max77693_haptic_enable(struct max77693_haptic *haptic)
+ 	if (haptic->enabled)
+ 		return;
+ 
++	error = max77843_haptic_bias(haptic, true);
++	if (error)
++		return;
++
++	error = regulator_enable(haptic->motor_reg);
++	if (error) {
++		dev_err(haptic->dev,
++			"failed to enable regulator: %d\n", error);
++		goto err_enable_reg;
++	}
++
+ 	error = pwm_enable(haptic->pwm_dev);
+ 	if (error) {
+ 		dev_err(haptic->dev,
+ 			"failed to enable haptic pwm device: %d\n", error);
+-		return;
++		goto err_enable_pwm;
+ 	}
+ 
+ 	error = max77693_haptic_lowsys(haptic, true);
+@@ -196,6 +207,10 @@ static void max77693_haptic_enable(struct max77693_haptic *haptic)
+ 	max77693_haptic_lowsys(haptic, false);
+ err_enable_lowsys:
+ 	pwm_disable(haptic->pwm_dev);
++err_enable_pwm:
++	regulator_disable(haptic->motor_reg);
++err_enable_reg:
++	max77843_haptic_bias(haptic, false);
+ }
+ 
+ static void max77693_haptic_disable(struct max77693_haptic *haptic)
+@@ -214,6 +229,11 @@ static void max77693_haptic_disable(struct max77693_haptic *haptic)
+ 		goto err_disable_lowsys;
+ 
+ 	pwm_disable(haptic->pwm_dev);
++	error = regulator_disable(haptic->motor_reg);
++	if (error)
++		dev_err(haptic->dev,
++			"failed to disable regulator: %d\n", error);
++	max77843_haptic_bias(haptic, false);
+ 	haptic->enabled = false;
+ 
+ 	return;
+@@ -268,37 +288,15 @@ static int max77693_haptic_play_effect(struct input_dev *dev, void *data,
+ 
+ static int max77693_haptic_open(struct input_dev *dev)
+ {
+-	struct max77693_haptic *haptic = input_get_drvdata(dev);
+-	int error;
+-
+-	error = max77843_haptic_bias(haptic, true);
+-	if (error)
+-		return error;
+-
+-	error = regulator_enable(haptic->motor_reg);
+-	if (error) {
+-		dev_err(haptic->dev,
+-			"failed to enable regulator: %d\n", error);
+-		return error;
+-	}
+-
+ 	return 0;
+ }
+ 
+ static void max77693_haptic_close(struct input_dev *dev)
+ {
+ 	struct max77693_haptic *haptic = input_get_drvdata(dev);
+-	int error;
+ 
+ 	cancel_work_sync(&haptic->work);
+ 	max77693_haptic_disable(haptic);
+-
+-	error = regulator_disable(haptic->motor_reg);
+-	if (error)
+-		dev_err(haptic->dev,
+-			"failed to disable regulator: %d\n", error);
+-
+-	max77843_haptic_bias(haptic, false);
+ }
+ 
+ static int max77693_haptic_probe(struct platform_device *pdev)
+diff --git a/drivers/media/i2c/ak7375.c b/drivers/media/i2c/ak7375.c
+index 4920682dd..b98455048 100644
+--- a/drivers/media/i2c/ak7375.c
++++ b/drivers/media/i2c/ak7375.c
+@@ -341,7 +341,7 @@ static const struct of_device_id ak7375_of_table[] = {
+ MODULE_DEVICE_TABLE(of, ak7375_of_table);
+ 
+ static const struct dev_pm_ops ak7375_pm_ops = {
+-	SET_SYSTEM_SLEEP_PM_OPS(ak7375_vcm_suspend, ak7375_vcm_resume)
++	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
+ 	SET_RUNTIME_PM_OPS(ak7375_vcm_suspend, ak7375_vcm_resume, NULL)
+ };
+ 
+diff --git a/drivers/nfc/sec_nfc.c b/drivers/nfc/sec_nfc.c
+index 1168c05ef..db6edf7e8 100644
+--- a/drivers/nfc/sec_nfc.c
++++ b/drivers/nfc/sec_nfc.c
+@@ -77,6 +77,7 @@ struct sec_nfc_info {
+ 	bool clk_ctl;
+ 	bool clk_state;
+ 	bool irq_wake_enabled;
++	bool vdd_on;
+ 
+ 	enum sec_nfc_mode mode;
+ 	enum sec_nfc_irq_state read_irq;
+@@ -160,6 +161,20 @@ static void sec_nfc_clk_ctl_disable(struct sec_nfc_info *info)
+ 	info->clk_ctl = false;
+ }
+ 
++static void sec_nfc_set_vdd(struct sec_nfc_info *info, bool on)
++{
++	if (!info->vdd || info->vdd_on == on)
++		return;
++
++	if (on) {
++		if (!regulator_enable(info->vdd))
++			info->vdd_on = true;
++	} else {
++		if (!regulator_disable(info->vdd))
++			info->vdd_on = false;
++	}
++}
++
+ static void sec_nfc_set_mode(struct sec_nfc_info *info, enum sec_nfc_mode mode)
+ {
+ 	if (info->mode == mode)
+@@ -179,6 +194,7 @@ static void sec_nfc_set_mode(struct sec_nfc_info *info, enum sec_nfc_mode mode)
+ 		gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_FW_ON);
+ 
+ 	if (mode != SEC_NFC_MODE_OFF) {
++		sec_nfc_set_vdd(info, true);
+ 		msleep(SEC_NFC_VEN_WAIT_TIME);
+ 		gpiod_set_value_cansleep(info->ven_gpio, SEC_NFC_PW_ON);
+ 		sec_nfc_clk_ctl_enable(info);
+@@ -196,6 +212,7 @@ static void sec_nfc_set_mode(struct sec_nfc_info *info, enum sec_nfc_mode mode)
+ 		mutex_lock(&info->read_mutex);
+ 		info->read_irq = SEC_NFC_NONE;
+ 		mutex_unlock(&info->read_mutex);
++		sec_nfc_set_vdd(info, false);
+ 	}
+ }
+ 
+@@ -336,6 +353,7 @@ static long sec_nfc_ioctl(struct file *file, unsigned int cmd, unsigned long arg
+ 		break;
+ 	case SEC_NFC_SET_NPT_MODE:
+ 		if (new_mode == SEC_NFC_NPT_CMD_ON) {
++			sec_nfc_set_vdd(info, true);
+ 			info->mode = SEC_NFC_MODE_FIRMWARE;
+ 			mutex_lock(&info->read_mutex);
+ 			info->read_irq = SEC_NFC_SKIP;
+@@ -350,6 +368,7 @@ static long sec_nfc_ioctl(struct file *file, unsigned int cmd, unsigned long arg
+ 				gpiod_set_value_cansleep(info->firm_gpio, SEC_NFC_FW_OFF);
+ 			gpiod_set_value_cansleep(info->ven_gpio, SEC_NFC_PW_OFF);
+ 			sec_nfc_clk_ctl_disable(info);
++			sec_nfc_set_vdd(info, false);
+ 		}
+ 		break;
+ 	default:
+@@ -427,11 +446,7 @@ static int sec_nfc_probe(struct i2c_client *client)
+ 		else
+ 			return dev_err_probe(dev, PTR_ERR(info->vdd), "vdd supply\n");
+ 	}
+-	if (info->vdd) {
+-		ret = regulator_enable(info->vdd);
+-		if (ret)
+-			return ret;
+-	}
++	/* vdd is enabled on demand in sec_nfc_set_vdd() when NFC is active. */
+ 
+ 	/* VEN starts OFF (HIGH on S3FWRN5) */
+ 	info->ven_gpio = devm_gpiod_get(dev, "ven", GPIOD_OUT_HIGH);
+@@ -488,8 +503,7 @@ static void sec_nfc_remove(struct i2c_client *client)
+ 	mutex_lock(&info->mutex);
+ 	sec_nfc_set_mode(info, SEC_NFC_MODE_OFF);
+ 	mutex_unlock(&info->mutex);
+-	if (info->vdd)
+-		regulator_disable(info->vdd);
++	sec_nfc_set_vdd(info, false);
+ }
+ 
+ static const struct of_device_id sec_nfc_of_match[] = {

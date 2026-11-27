@@ -61,14 +61,22 @@ cp -a "$KSU_SRC_BUNDLE/." "$KERNEL_SRC/drivers/kernelsu/"
 rm -rf "$KERNEL_SRC/drivers/kernelsu/.git"
 
 # 4. Apply kernel patches (SukiSU-Nova config + exynos-drm defer fix, idempotent)
+PATCH_MARK_DIR="$KERNEL_SRC/.git/zeroflte_patches"
+mkdir -p "$PATCH_MARK_DIR"
 for KPATCH in "$BUNDLE_DIR/patches/kernel/"*.patch; do
     [ -f "$KPATCH" ] || continue
-    if git -C "$KERNEL_SRC" apply --reverse --check "$KPATCH" >/dev/null 2>&1; then
-        echo "[SKIP] Kernel patch already applied: $(basename "$KPATCH")"
+    PNAME="$(basename "$KPATCH")"
+    PSHA="$(sha256sum "$KPATCH" | awk "{print \$1}")"
+    if [[ -f "$PATCH_MARK_DIR/$PNAME" && "$(cat "$PATCH_MARK_DIR/$PNAME")" == "$PSHA" ]]; then
+        echo "[SKIP] Kernel patch marker matches: $PNAME"
+    elif git -C "$KERNEL_SRC" apply --reverse --check "$KPATCH" >/dev/null 2>&1; then
+        echo "$PSHA" > "$PATCH_MARK_DIR/$PNAME"
+        echo "[SKIP] Kernel patch already applied: $PNAME"
     else
         git -C "$KERNEL_SRC" apply --check "$KPATCH"
         git -C "$KERNEL_SRC" apply "$KPATCH"
-        echo "[OK]   Applied kernel patch: $(basename "$KPATCH")"
+        echo "$PSHA" > "$PATCH_MARK_DIR/$PNAME"
+        echo "[OK]   Applied kernel patch: $PNAME"
     fi
 done
 

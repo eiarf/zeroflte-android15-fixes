@@ -50,6 +50,7 @@ apply_patch "hardware/interfaces"                     "$PATCH_ROOT/hardware/inte
 apply_patch "hardware/samsung_slsi-linaro/exynos"     "$PATCH_ROOT/hardware/samsung_slsi-linaro/exynos/0001-ssp-keep-the-unused-StrongBox-code-out-of-the-build.patch"
 apply_patch "hardware/samsung_slsi-linaro/exynos"     "$PATCH_ROOT/hardware/samsung_slsi-linaro/exynos/0002-exynos-keep-the-HIDL-dumpstate-and-unit-tests-out-of-the-build.patch"
 apply_patch "system/tools/mkbootimg"                  "$PATCH_ROOT/system/tools/mkbootimg/0001-mkbootimg-add-support-for-dt.patch"
+apply_patch "packages/apps/Settings"                  "$PATCH_ROOT/packages/apps/Settings/0001-settings-volume-slider-skip-missing-action-max-changed.patch"
 
 if [[ "$SKIP_GMS" != "1" && -d "$ROM_DIR/vendor/gms" ]]; then
     apply_patch "vendor/gms"                          "$PATCH_ROOT/vendor/gms/0001-gms-pico-slim-for-3gb-ram-and-small-system.patch"

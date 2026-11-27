@@ -1,0 +1,2 @@
+# mediacodec.te
+get_prop(mediacodec, vendor_codec2_prop)

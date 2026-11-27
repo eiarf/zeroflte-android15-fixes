@@ -530,10 +530,10 @@ on property:sys.boot_completed=1
 
 # Deep Sleep Fix (s2idle) for Linux 6.6 Exynos7420
 on early-init
-    write /sys/power/mem_sleep s2idle
+    write /sys/power/mem_sleep deep
 
 on boot
-    write /sys/power/mem_sleep s2idle
+    write /sys/power/mem_sleep deep
 
 on property:sys.boot_completed=1
-    write /sys/power/mem_sleep s2idle
+    write /sys/power/mem_sleep deep

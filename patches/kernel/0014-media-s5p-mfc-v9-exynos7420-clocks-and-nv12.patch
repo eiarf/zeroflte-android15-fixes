@@ -1,0 +1,1423 @@
+diff --git a/arch/arm64/boot/dts/exynos/exynos7.dtsi b/arch/arm64/boot/dts/exynos/exynos7.dtsi
+index e3da140c5..cd6d43542 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7.dtsi
++++ b/arch/arm64/boot/dts/exynos/exynos7.dtsi
+@@ -739,6 +739,24 @@ cmu_g3d: clock-controller@14aa0000 {
+ 			status = "disabled";
+ 		};
+ 
++		cmu_bus1: clock-controller@14800000 {
++			compatible = "samsung,exynos7-clock-bus1";
++			reg = <0x14800000 0xd00>;
++			#clock-cells = <1>;
++			clocks = <&fin_pll>, <&clock_topc ACLK_BUS1_532>;
++			clock-names = "fin_pll", "aclk_bus1_532";
++		};
++
++		cmu_mfc: clock-controller@15280000 {
++			compatible = "samsung,exynos7-clock-mfc";
++			reg = <0x15280000 0xd00>;
++			#clock-cells = <1>;
++			clocks = <&fin_pll>, <&clock_topc ACLK_MFC_532>;
++			clock-names = "fin_pll", "aclk_mfc_532";
++			power-domains = <&pd_mfc>;
++			status = "disabled";
++		};
++
+ 		cmu_cam0: clock-controller@144d0000 {
+ 			compatible = "samsung,exynos7-clock-cam0";
+ 			reg = <0x144d0000 0xb04>;
+@@ -1263,7 +1281,8 @@ pd_isp1: power-domain@105c4180 {
+ 		};
+ 
+ 		pd_mfc: power-domain@105c41a0 {
+-			compatible = "samsung,exynos5433-pd";
++			compatible = "samsung,exynos7420-mfc-pd",
++				     "samsung,exynos5433-pd";
+ 			reg = <0x105c41a0 0x20>;
+ 			#power-domain-cells = <0>;
+ 			label = "MFC";
+@@ -1375,6 +1394,48 @@ pwm: pwm@136c0000 {
+ 			clock-names = "timers";
+ 		};
+ 
++		sysmmu_mfc_0: iommu@15200000 {
++			compatible = "samsung,exynos7420-sysmmu";
++			reg = <0x15200000 0x1000>;
++			interrupts = <GIC_SPI 312 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&cmu_mfc CLK_ACLK_MFC_0_SYSMMU>,
++				 <&cmu_mfc CLK_PCLK_MFC_0_SYSMMU>,
++				 <&cmu_mfc CLK_ACLK_MFC>;
++			clock-names = "aclk", "pclk", "master";
++			#iommu-cells = <0>;
++			power-domains = <&pd_mfc>;
++			samsung,no-wait-master;
++			status = "disabled";
++		};
++
++		sysmmu_mfc_1: iommu@15210000 {
++			compatible = "samsung,exynos7420-sysmmu";
++			reg = <0x15210000 0x1000>;
++			interrupts = <GIC_SPI 315 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&cmu_mfc CLK_ACLK_MFC_1_SYSMMU>,
++				 <&cmu_mfc CLK_PCLK_MFC_1_SYSMMU>,
++				 <&cmu_mfc CLK_ACLK_MFC>;
++			clock-names = "aclk", "pclk", "master";
++			#iommu-cells = <0>;
++			power-domains = <&pd_mfc>;
++			samsung,no-wait-master;
++			status = "disabled";
++		};
++
++		mfc: codec@152e0000 {
++			compatible = "samsung,exynos7420-mfc";
++			reg = <0x152e0000 0x10000>;
++			interrupts = <GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&cmu_mfc CLK_PCLK_MFC>,
++				 <&cmu_mfc CLK_ACLK_MFC>,
++				 <&cmu_mfc CLK_ACLK_LH_S_MFC_0>,
++				 <&cmu_mfc CLK_ACLK_LH_S_MFC_1>;
++			clock-names = "pclk", "aclk", "aclk_lh_s0", "aclk_lh_s1";
++			power-domains = <&pd_mfc>;
++			iommus = <&sysmmu_mfc_0>, <&sysmmu_mfc_1>;
++			status = "disabled";
++		};
++
+ 		sysmmu_disp_ro: iommu@13a00000 {
+ 			compatible = "samsung,exynos7420-sysmmu";
+ 			reg = <0x13a00000 0x1000>;
+diff --git a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+index 04a372263..8dec3ff3e 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
++++ b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+@@ -1916,6 +1916,26 @@ &sysmmu_disp_rw {
+ 	status = "okay";
+ };
+ 
++&cmu_mfc {
++	assigned-clocks = <&cmu_mfc CLK_MOUT_USER_ACLK_MFC_532>,
++			  <&clock_topc DOUT_ACLK_MFC_532>;
++	assigned-clock-parents = <&clock_topc ACLK_MFC_532>;
++	assigned-clock-rates = <0>, <400000000>;
++	status = "okay";
++};
++
++&sysmmu_mfc_0 {
++	status = "okay";
++};
++
++&sysmmu_mfc_1 {
++	status = "okay";
++};
++
++&mfc {
++	status = "okay";
++};
++
+ &{/timer} {
+ 	/* S-Boot enters every CPU at EL1 and never programs CNTVOFF_EL2. */
+ 	arm,cpu-registers-not-fw-configured;
+diff --git a/arch/arm64/configs/zeroflte_gki.fragment b/arch/arm64/configs/zeroflte_gki.fragment
+index 0c8b54a98..366ca0249 100644
+--- a/arch/arm64/configs/zeroflte_gki.fragment
++++ b/arch/arm64/configs/zeroflte_gki.fragment
+@@ -398,6 +398,8 @@ CONFIG_VIDEO_S5K4E6=m
+ CONFIG_VIDEO_AK7375=m
+ CONFIG_VIDEO_IDG2030=m
+ CONFIG_MEDIA_PLATFORM_SUPPORT=y
++CONFIG_V4L_MEM2MEM_DRIVERS=y
++CONFIG_VIDEO_SAMSUNG_S5P_MFC=m
+ CONFIG_VIDEO_IMX_MIPI_CSIS=m
+ CONFIG_VIDEO_EXYNOS7_FLITE=m
+ CONFIG_CMA_SIZE_MBYTES=32
+diff --git a/drivers/clk/samsung/clk-exynos7.c b/drivers/clk/samsung/clk-exynos7.c
+index 942e44040..e8264aab9 100644
+--- a/drivers/clk/samsung/clk-exynos7.c
++++ b/drivers/clk/samsung/clk-exynos7.c
+@@ -116,6 +116,8 @@ static const unsigned long topc_clk_regs[] __initconst = {
+ 	DIV_TOPC0,
+ 	DIV_TOPC1,
+ 	DIV_TOPC3,
++	ENABLE_ACLK_TOPC0,
++	ENABLE_ACLK_TOPC1,
+ };
+ 
+ static const struct samsung_mux_clock topc_mux_clks[] __initconst = {
+@@ -152,6 +154,8 @@ static const struct samsung_mux_clock topc_mux_clks[] __initconst = {
+ 	MUX(0, "mout_aclk_bus1_200", mout_topc_group2, MUX_SEL_TOPC2, 16, 2),
+ 	MUX(0, "mout_aclk_imem_266", mout_topc_group2, MUX_SEL_TOPC2, 20, 2),
+ 
++	MUX(MOUT_ACLK_MFC_532, "mout_aclk_mfc_532", mout_topc_group2,
++		MUX_SEL_TOPC3, 8, 2),
+ 	MUX(0, "mout_aclk_mscl_532", mout_topc_group2, MUX_SEL_TOPC3, 20, 2),
+ 	MUX(0, "mout_aclk_peris_66", mout_topc_group2, MUX_SEL_TOPC3, 24, 2),
+ 	MUX(0, "mout_pclk_bus01_133", mout_topc_group2, MUX_SEL_TOPC3, 28, 2),
+@@ -176,6 +180,8 @@ static const struct samsung_div_clock topc_div_clks[] __initconst = {
+ 	DIV(DOUT_ACLK_IMEM_266, "dout_aclk_imem_266", "mout_aclk_imem_266",
+ 		DIV_TOPC0, 20, 4),
+ 
++	DIV(DOUT_ACLK_MFC_532, "dout_aclk_mfc_532", "mout_aclk_mfc_532",
++		DIV_TOPC1, 8, 4),
+ 	DIV(DOUT_ACLK_MSCL_532, "dout_aclk_mscl_532", "mout_aclk_mscl_532",
+ 		DIV_TOPC1, 20, 4),
+ 	DIV(DOUT_ACLK_PERIS, "dout_aclk_peris_66", "mout_aclk_peris_66",
+@@ -223,6 +229,11 @@ static const struct samsung_pll_rate_table pll1450x_mif_24mhz_tbl[] __initconst
+ static const struct samsung_gate_clock topc_gate_clks[] __initconst = {
+ 	GATE(ACLK_CCORE_133, "aclk_ccore_133", "dout_aclk_ccore_133",
+ 		ENABLE_ACLK_TOPC0, 4, CLK_IS_CRITICAL, 0),
++	GATE(ACLK_BUS1_532, "aclk_bus1_532", "dout_aclk_bus1_532",
++		ENABLE_ACLK_TOPC0, 12, CLK_IS_CRITICAL, 0),
++
++	GATE(ACLK_MFC_532, "aclk_mfc_532", "dout_aclk_mfc_532",
++		ENABLE_ACLK_TOPC1, 8, CLK_SET_RATE_PARENT, 0),
+ 
+ 	GATE(ACLK_MSCL_532, "aclk_mscl_532", "dout_aclk_mscl_532",
+ 		ENABLE_ACLK_TOPC1, 20, 0, 0),
+@@ -2494,10 +2505,138 @@ static int __init exynos7_cmu_probe(struct platform_device *pdev)
+ 	return exynos_arm64_register_cmu_pm(pdev, false);
+ }
+ 
++/*
++ * CMU_BUS1 (0x14800000): interconnect clock controller serving BUS1 masters
++ * including the MFC interconnect halves.
++ */
++#define MUX_SEL_BUS1			0x0200
++#define ENABLE_ACLK_BUS1		0x0800
++
++static const unsigned long bus1_clk_regs[] __initconst = {
++	MUX_SEL_BUS1,
++	ENABLE_ACLK_BUS1,
++};
++
++PNAME(mout_bus1_aclk_532_user_p) = { "fin_pll", "aclk_bus1_532" };
++
++static const struct samsung_mux_clock bus1_mux_clks[] __initconst = {
++	MUX(0, "mout_bus1_aclk_532_user", mout_bus1_aclk_532_user_p,
++		MUX_SEL_BUS1, 0, 1),
++};
++
++static const struct samsung_gate_clock bus1_gate_clks[] __initconst = {
++	GATE(CLK_ACLK_LH_MFC1, "aclk_lh_mfc1", "mout_bus1_aclk_532_user",
++		ENABLE_ACLK_BUS1, 24, CLK_IS_CRITICAL, 0),
++	GATE(CLK_ACLK_LH_MFC0, "aclk_lh_mfc0", "mout_bus1_aclk_532_user",
++		ENABLE_ACLK_BUS1, 25, CLK_IS_CRITICAL, 0),
++};
++
++static const struct samsung_cmu_info bus1_cmu_info __initconst = {
++	.mux_clks		= bus1_mux_clks,
++	.nr_mux_clks		= ARRAY_SIZE(bus1_mux_clks),
++	.gate_clks		= bus1_gate_clks,
++	.nr_gate_clks		= ARRAY_SIZE(bus1_gate_clks),
++	.nr_clk_ids		= BUS1_NR_CLK,
++	.clk_regs		= bus1_clk_regs,
++	.nr_clk_regs		= ARRAY_SIZE(bus1_clk_regs),
++};
++
++static void __init exynos7_clk_bus1_init(struct device_node *np)
++{
++	samsung_cmu_register_one(np, &bus1_cmu_info);
++}
++
++CLK_OF_DECLARE(exynos7_clk_bus1, "samsung,exynos7-clock-bus1",
++		exynos7_clk_bus1_init);
++
++/*
++ * CMU_MFC (0x15280000): Multi-Format Codec block inside pd_mfc.
++ */
++#define MUX_SEL_MFC			0x0200
++#define DIV_MFC				0x0600
++#define ENABLE_ACLK_MFC			0x0800
++#define ENABLE_ACLK_MFC_0_SMMU		0x0804
++#define ENABLE_ACLK_MFC_0_SFW		0x0808
++#define ENABLE_ACLK_MFC_1_SMMU		0x080C
++#define ENABLE_ACLK_MFC_1_SFW		0x0810
++#define ENABLE_PCLK_MFC			0x0900
++#define ENABLE_PCLK_MFC_0_SMMU		0x0904
++#define ENABLE_PCLK_MFC_0_SFW		0x0908
++#define ENABLE_PCLK_MFC_1_SMMU		0x090C
++#define ENABLE_PCLK_MFC_1_SFW		0x0910
++
++static const unsigned long mfc_clk_regs[] __initconst = {
++	MUX_SEL_MFC,
++	DIV_MFC,
++	ENABLE_ACLK_MFC,
++	ENABLE_ACLK_MFC_0_SMMU,
++	ENABLE_ACLK_MFC_0_SFW,
++	ENABLE_ACLK_MFC_1_SMMU,
++	ENABLE_ACLK_MFC_1_SFW,
++	ENABLE_PCLK_MFC,
++	ENABLE_PCLK_MFC_0_SMMU,
++	ENABLE_PCLK_MFC_0_SFW,
++	ENABLE_PCLK_MFC_1_SMMU,
++	ENABLE_PCLK_MFC_1_SFW,
++};
++
++static const struct samsung_clk_reg_dump mfc_pd_off_gates[] = {
++	{ ENABLE_ACLK_MFC, 0xc0080000 },
++};
++
++PNAME(mout_mfc_aclk_532_user_p) = { "fin_pll", "aclk_mfc_532" };
++
++static const struct samsung_mux_clock mfc_mux_clks[] __initconst = {
++	MUX(CLK_MOUT_USER_ACLK_MFC_532, "mout_user_aclk_mfc_532",
++		mout_mfc_aclk_532_user_p, MUX_SEL_MFC, 0, 1),
++};
++
++static const struct samsung_div_clock mfc_div_clks[] __initconst = {
++	DIV(CLK_DOUT_PCLK_MFC, "dout_pclk_mfc", "mout_user_aclk_mfc_532",
++		DIV_MFC, 0, 2),
++};
++
++static const struct samsung_gate_clock mfc_gate_clks[] __initconst = {
++	GATE(CLK_ACLK_LH_S_MFC_0, "aclk_lh_s_mfc_0", "mout_user_aclk_mfc_532",
++		ENABLE_ACLK_MFC, 31, 0, 0),
++	GATE(CLK_ACLK_LH_S_MFC_1, "aclk_lh_s_mfc_1", "mout_user_aclk_mfc_532",
++		ENABLE_ACLK_MFC, 30, 0, 0),
++	GATE(CLK_ACLK_MFC, "aclk_mfc", "mout_user_aclk_mfc_532",
++		ENABLE_ACLK_MFC, 19, CLK_SET_RATE_PARENT, 0),
++	GATE(CLK_PCLK_MFC, "pclk_mfc", "dout_pclk_mfc",
++		ENABLE_PCLK_MFC, 31, 0, 0),
++	GATE(CLK_ACLK_MFC_0_SYSMMU, "aclk_mfc_0_sysmmu",
++		"mout_user_aclk_mfc_532", ENABLE_ACLK_MFC_0_SMMU, 0, 0, 0),
++	GATE(CLK_ACLK_MFC_1_SYSMMU, "aclk_mfc_1_sysmmu",
++		"mout_user_aclk_mfc_532", ENABLE_ACLK_MFC_1_SMMU, 0, 0, 0),
++	GATE(CLK_PCLK_MFC_0_SYSMMU, "pclk_mfc_0_sysmmu", "dout_pclk_mfc",
++		ENABLE_PCLK_MFC_0_SMMU, 0, 0, 0),
++	GATE(CLK_PCLK_MFC_1_SYSMMU, "pclk_mfc_1_sysmmu", "dout_pclk_mfc",
++		ENABLE_PCLK_MFC_1_SMMU, 0, 0, 0),
++};
++
++static const struct samsung_cmu_info mfc_cmu_info __initconst = {
++	.mux_clks		= mfc_mux_clks,
++	.nr_mux_clks		= ARRAY_SIZE(mfc_mux_clks),
++	.div_clks		= mfc_div_clks,
++	.nr_div_clks		= ARRAY_SIZE(mfc_div_clks),
++	.gate_clks		= mfc_gate_clks,
++	.nr_gate_clks		= ARRAY_SIZE(mfc_gate_clks),
++	.nr_clk_ids		= MFC_NR_CLK,
++	.clk_regs		= mfc_clk_regs,
++	.nr_clk_regs		= ARRAY_SIZE(mfc_clk_regs),
++	.pd_off_gates		= mfc_pd_off_gates,
++	.nr_pd_off_gates	= ARRAY_SIZE(mfc_pd_off_gates),
++	.clk_name		= "aclk_mfc_532",
++};
++
+ static const struct of_device_id exynos7_cmu_of_match[] = {
+ 	{
+ 		.compatible = "samsung,exynos7-clock-cam0",
+ 		.data = &cam0_cmu_info,
++	}, {
++		.compatible = "samsung,exynos7-clock-mfc",
++		.data = &mfc_cmu_info,
+ 	},
+ 	{ }
+ };
+diff --git a/drivers/iommu/exynos-iommu.c b/drivers/iommu/exynos-iommu.c
+index 8d69df86f..79140d1a4 100644
+--- a/drivers/iommu/exynos-iommu.c
++++ b/drivers/iommu/exynos-iommu.c
+@@ -823,7 +823,9 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
+ 	if (match) {
+ 		data->version = match->version;
+ 		data->variant = match->variant;
+-		data->wait_master = match->wait_master;
++		data->wait_master = match->wait_master &&
++			!of_property_read_bool(dev->of_node,
++					      "samsung,no-wait-master");
+ 	} else {
+ 		__sysmmu_get_version(data);
+ 	}
+@@ -1613,6 +1615,29 @@ int exynos_iommu_map_identity(struct device *master, phys_addr_t phys,
+ }
+ EXPORT_SYMBOL_GPL(exynos_iommu_map_identity);
+ 
++static void exynos_iommu_get_resv_regions(struct device *dev,
++					  struct list_head *list)
++{
++	of_iommu_get_resv_regions(dev, list);
++
++	/*
++	 * Exynos7420 MFC v9 firmware computes internal RISC addresses relative to
++	 * RISC_BASE_ADDRESS and rejects any buffer whose IOVA is below it or
++	 * >= 3 GiB above it with error 0x37. Reserve [0..0x40000000) so FW sits
++	 * at 0x40000000 and all DMA allocations stay inside [0x40000000..0xfeffffff].
++	 */
++	if (dev->of_node &&
++	    of_device_is_compatible(dev->of_node, "samsung,exynos7420-mfc")) {
++		struct iommu_resv_region *region;
++
++		region = iommu_alloc_resv_region(0, 0x40000000ULL, 0,
++						 IOMMU_RESV_RESERVED,
++						 GFP_KERNEL);
++		if (region)
++			list_add_tail(&region->list, list);
++	}
++}
++
+ static const struct iommu_ops exynos_iommu_ops = {
+ 	.domain_alloc = exynos_iommu_domain_alloc,
+ 	.device_group = generic_device_group,
+@@ -1623,7 +1648,7 @@ static const struct iommu_ops exynos_iommu_ops = {
+ 	.release_device = exynos_iommu_release_device,
+ 	.pgsize_bitmap = SECT_SIZE | LPAGE_SIZE | SPAGE_SIZE,
+ 	.of_xlate = exynos_iommu_of_xlate,
+-	.get_resv_regions = of_iommu_get_resv_regions,
++	.get_resv_regions = exynos_iommu_get_resv_regions,
+ 	.default_domain_ops = &(const struct iommu_domain_ops) {
+ 		.attach_dev	= exynos_iommu_attach_device,
+ 		.map		= exynos_iommu_map,
+diff --git a/drivers/media/platform/samsung/s5p-mfc/regs-mfc-v10.h b/drivers/media/platform/samsung/s5p-mfc/regs-mfc-v10.h
+index fadd9139b..abc81b291 100644
+--- a/drivers/media/platform/samsung/s5p-mfc/regs-mfc-v10.h
++++ b/drivers/media/platform/samsung/s5p-mfc/regs-mfc-v10.h
+@@ -42,6 +42,11 @@
+ #define S5P_FIMV_E_HEVC_NAL_CONTROL_V10			0xFDE8
+ 
+ /* MFCv10 Context buffer sizes */
++#define MFC_CTX_BUF_SIZE_V9		(36 * SZ_1K)
++#define MAX_FW_SIZE_V9			(SZ_1M)
++#define MAX_CPB_SIZE_V9			(3 * SZ_1M)
++#define MFC_VERSION_V9			0x90
++#define MFC_NUM_PORTS_V9		1
+ #define MFC_CTX_BUF_SIZE_V10		(30 * SZ_1K)
+ #define MFC_H264_DEC_CTX_BUF_SIZE_V10	(2 * SZ_1M)
+ #define MFC_OTHER_DEC_CTX_BUF_SIZE_V10	(20 * SZ_1K)
+diff --git a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc.c b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc.c
+index e30e54935..577157164 100644
+--- a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc.c
++++ b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc.c
+@@ -235,7 +235,8 @@ static void s5p_mfc_handle_frame_all_extracted(struct s5p_mfc_ctx *ctx)
+ 		mfc_debug(2, "Cleaning up buffer: %d\n",
+ 					  dst_buf->b->vb2_buf.index);
+ 		vb2_set_plane_payload(&dst_buf->b->vb2_buf, 0, 0);
+-		vb2_set_plane_payload(&dst_buf->b->vb2_buf, 1, 0);
++		if (ctx->dst_fmt->num_planes > 1)
++			vb2_set_plane_payload(&dst_buf->b->vb2_buf, 1, 0);
+ 		list_del(&dst_buf->list);
+ 		dst_buf->flags |= MFC_BUF_FLAG_EOS;
+ 		ctx->dst_queue_cnt--;
+@@ -352,10 +353,15 @@ static void s5p_mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
+ 			else
+ 				dst_buf->b->field =
+ 							V4L2_FIELD_INTERLACED;
+-			vb2_set_plane_payload(&dst_buf->b->vb2_buf, 0,
+-						ctx->luma_size);
+-			vb2_set_plane_payload(&dst_buf->b->vb2_buf, 1,
+-						ctx->chroma_size);
++			if (ctx->dst_fmt->num_planes == 1) {
++				vb2_set_plane_payload(&dst_buf->b->vb2_buf, 0,
++					ctx->luma_size + ctx->chroma_size);
++			} else {
++				vb2_set_plane_payload(&dst_buf->b->vb2_buf, 0,
++							ctx->luma_size);
++				vb2_set_plane_payload(&dst_buf->b->vb2_buf, 1,
++							ctx->chroma_size);
++			}
+ 			clear_bit(dst_buf->b->vb2_buf.index,
+ 							&ctx->dec_dst_flag);
+ 
+@@ -437,7 +443,10 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
+ 		ctx->consumed_stream += s5p_mfc_hw_call(dev->mfc_ops,
+ 						get_consumed_stream, dev);
+ 		if (ctx->codec_mode != S5P_MFC_CODEC_H264_DEC &&
++			ctx->codec_mode != S5P_MFC_CODEC_H264_MVC_DEC &&
++			ctx->codec_mode != S5P_MFC_CODEC_HEVC_DEC &&
+ 			ctx->codec_mode != S5P_MFC_CODEC_VP8_DEC &&
++			ctx->codec_mode != S5P_MFC_CODEC_VP9_DEC &&
+ 			ctx->consumed_stream + STUFF_BYTE <
+ 			src_buf->b->vb2_buf.planes[0].bytesused) {
+ 			/* Run MFC again on the same buffer */
+@@ -546,15 +555,22 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
+ 			ctx->state = MFCINST_HEAD_PARSED;
+ 
+ 		if ((ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
+-			ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC) &&
++			ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC ||
++			ctx->codec_mode == S5P_MFC_CODEC_HEVC_DEC ||
++			ctx->codec_mode == S5P_MFC_CODEC_VP8_DEC ||
++			ctx->codec_mode == S5P_MFC_CODEC_VP9_DEC) &&
+ 				!list_empty(&ctx->src_queue)) {
+ 			struct s5p_mfc_buf *src_buf;
++			unsigned int consumed;
+ 
+ 			src_buf = list_entry(ctx->src_queue.next,
+ 					struct s5p_mfc_buf, list);
+-			if (s5p_mfc_hw_call(dev->mfc_ops, get_consumed_stream,
+-						dev) <
+-					src_buf->b->vb2_buf.planes[0].bytesused)
++			consumed = s5p_mfc_hw_call(dev->mfc_ops,
++						get_consumed_stream, dev);
++			mfc_debug(2, "SEQ consumed=%u bytesused=%u\n",
++				  consumed,
++				  src_buf->b->vb2_buf.planes[0].bytesused);
++			if (consumed + src_buf->b->vb2_buf.planes[0].data_offset < src_buf->b->vb2_buf.planes[0].bytesused)
+ 				ctx->head_processed = 0;
+ 			else
+ 				ctx->head_processed = 1;
+@@ -566,6 +582,14 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
+ 	clear_work_bit(ctx);
+ 	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+ 	s5p_mfc_clock_off();
++	if (ctx->state == MFCINST_HEAD_PARSED) {
++		static const struct v4l2_event ev_src_ch = {
++			.type = V4L2_EVENT_SOURCE_CHANGE,
++			.u.src_change.changes = V4L2_EVENT_SRC_CH_RESOLUTION,
++		};
++
++		v4l2_event_queue_fh(&ctx->fh, &ev_src_ch);
++	}
+ 	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+ 	wake_up_ctx(ctx, reason, err);
+ }
+@@ -591,6 +615,8 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
+ 			if (!list_empty(&ctx->src_queue)) {
+ 				src_buf = list_entry(ctx->src_queue.next,
+ 					     struct s5p_mfc_buf, list);
++				if (src_buf->flags & MFC_BUF_FLAG_EOS)
++					ctx->state = MFCINST_FINISHING;
+ 				list_del(&src_buf->list);
+ 				ctx->src_queue_cnt--;
+ 				vb2_buffer_done(&src_buf->b->vb2_buf,
+@@ -604,6 +630,11 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
+ 		s5p_mfc_clock_off();
+ 
+ 		wake_up(&ctx->queue);
++		if (ctx->type == MFCINST_DECODER &&
++		    ctx->dst_queue_cnt >= ctx->pb_count &&
++		    (ctx->state == MFCINST_FINISHING ||
++		     (ctx->state == MFCINST_RUNNING && ctx->src_queue_cnt >= 1)))
++			set_work_bit(ctx);
+ 		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+ 	} else {
+ 		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+@@ -629,6 +660,9 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
+ 		list_del(&mb_entry->list);
+ 		ctx->dst_queue_cnt--;
+ 		vb2_set_plane_payload(&mb_entry->b->vb2_buf, 0, 0);
++		if (ctx->dst_fmt->num_planes > 1)
++			vb2_set_plane_payload(&mb_entry->b->vb2_buf, 1, 0);
++		mb_entry->b->flags |= V4L2_BUF_FLAG_LAST;
+ 		vb2_buffer_done(&mb_entry->b->vb2_buf, VB2_BUF_STATE_DONE);
+ 	}
+ 
+@@ -860,10 +894,11 @@ static int s5p_mfc_open(struct file *file)
+ 	q->drv_priv = &ctx->fh;
+ 	q->lock = &dev->mfc_mutex;
+ 	if (vdev == dev->vfd_dec) {
+-		q->io_modes = VB2_MMAP;
++		q->io_modes = VB2_MMAP | VB2_DMABUF;
+ 		q->ops = get_dec_queue_ops();
++		q->bidirectional = 1;
+ 	} else if (vdev == dev->vfd_enc) {
+-		q->io_modes = VB2_MMAP | VB2_USERPTR;
++		q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+ 		q->ops = get_enc_queue_ops();
+ 	} else {
+ 		ret = -ENOENT;
+@@ -887,10 +922,10 @@ static int s5p_mfc_open(struct file *file)
+ 	q->drv_priv = &ctx->fh;
+ 	q->lock = &dev->mfc_mutex;
+ 	if (vdev == dev->vfd_dec) {
+-		q->io_modes = VB2_MMAP;
++		q->io_modes = VB2_MMAP | VB2_DMABUF;
+ 		q->ops = get_dec_queue_ops();
+ 	} else if (vdev == dev->vfd_enc) {
+-		q->io_modes = VB2_MMAP | VB2_USERPTR;
++		q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+ 		q->ops = get_enc_queue_ops();
+ 	} else {
+ 		ret = -ENOENT;
+@@ -1210,8 +1245,21 @@ static int s5p_mfc_configure_common_memory(struct s5p_mfc_dev *mfc_dev)
+ 	if (!mfc_dev->mem_bitmap)
+ 		return -ENOMEM;
+ 
+-	mfc_dev->mem_virt = dma_alloc_coherent(dev, mem_size,
+-					       &mfc_dev->mem_base, GFP_KERNEL);
++	{
++		u64 saved_cmask = dev->coherent_dma_mask;
++		u64 saved_blim = dev->bus_dma_limit;
++
++		if (exynos_is_iommu_available(dev)) {
++			dev->bus_dma_limit = 0x40000000ULL + mem_size - 1;
++			dev->coherent_dma_mask = 0x40000000ULL + mem_size - 1;
++		}
++		mfc_dev->mem_virt = dma_alloc_coherent(dev, mem_size,
++						       &mfc_dev->mem_base, GFP_KERNEL);
++		dev->coherent_dma_mask = saved_cmask;
++		if (exynos_is_iommu_available(dev))
++			dev->bus_dma_limit = saved_blim ? min(saved_blim, (u64)0xfeffffffULL)
++						: 0xfeffffffULL;
++	}
+ 	if (!mfc_dev->mem_virt) {
+ 		bitmap_free(mfc_dev->mem_bitmap);
+ 		dev_err(dev, "failed to preallocate %ld MiB for the firmware and context buffers\n",
+@@ -1637,6 +1685,31 @@ static struct s5p_mfc_variant mfc_drvdata_v8_5433 = {
+ 	.num_clocks	= 3,
+ };
+ 
++static struct s5p_mfc_buf_size_v6 mfc_buf_size_v9 = {
++	.dev_ctx	= MFC_CTX_BUF_SIZE_V9,
++	.h264_dec_ctx	= MFC_H264_DEC_CTX_BUF_SIZE_V8,
++	.other_dec_ctx	= MFC_OTHER_DEC_CTX_BUF_SIZE_V8,
++	.h264_enc_ctx	= MFC_H264_ENC_CTX_BUF_SIZE_V8,
++	.hevc_enc_ctx	= MFC_HEVC_ENC_CTX_BUF_SIZE_V10,
++	.other_enc_ctx	= MFC_OTHER_ENC_CTX_BUF_SIZE_V10,
++};
++
++static struct s5p_mfc_buf_size buf_size_v9 = {
++	.fw		= MAX_FW_SIZE_V9,
++	.cpb		= MAX_CPB_SIZE_V9,
++	.priv		= &mfc_buf_size_v9,
++};
++
++static struct s5p_mfc_variant mfc_drvdata_v9 = {
++	.version	= MFC_VERSION_V9,
++	.version_bit	= MFC_V9_BIT,
++	.port_num	= MFC_NUM_PORTS_V9,
++	.buf_size	= &buf_size_v9,
++	.fw_name[0]	= "mfc_fw.bin",
++	.clk_names	= {"pclk", "aclk", "aclk_lh_s0", "aclk_lh_s1"},
++	.num_clocks	= 4,
++};
++
+ static struct s5p_mfc_buf_size_v6 mfc_buf_size_v10 = {
+ 	.dev_ctx        = MFC_CTX_BUF_SIZE_V10,
+ 	.h264_dec_ctx   = MFC_H264_DEC_CTX_BUF_SIZE_V10,
+@@ -1679,6 +1752,9 @@ static const struct of_device_id exynos_mfc_match[] = {
+ 	}, {
+ 		.compatible = "samsung,exynos5433-mfc",
+ 		.data = &mfc_drvdata_v8_5433,
++	}, {
++		.compatible = "samsung,exynos7420-mfc",
++		.data = &mfc_drvdata_v9,
+ 	}, {
+ 		.compatible = "samsung,mfc-v10",
+ 		.data = &mfc_drvdata_v10,
+diff --git a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_common.h b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_common.h
+index 5304f42c8..38acba29b 100644
+--- a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_common.h
++++ b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_common.h
+@@ -774,19 +774,24 @@ void s5p_mfc_cleanup_queue(struct list_head *lh, struct vb2_queue *vq);
+ #define IS_MFCV6_PLUS(dev)	(dev->variant->version >= 0x60 ? 1 : 0)
+ #define IS_MFCV7_PLUS(dev)	(dev->variant->version >= 0x70 ? 1 : 0)
+ #define IS_MFCV8_PLUS(dev)	(dev->variant->version >= 0x80 ? 1 : 0)
++#define IS_MFCV9_PLUS(dev)	(dev->variant->version >= 0x90 ? 1 : 0)
+ #define IS_MFCV10(dev)		(dev->variant->version >= 0xA0 ? 1 : 0)
+-#define FW_HAS_E_MIN_SCRATCH_BUF(dev) (IS_MFCV10(dev))
++#define FW_HAS_E_MIN_SCRATCH_BUF(dev) (IS_MFCV9_PLUS(dev))
+ 
+ #define MFC_V5_BIT	BIT(0)
+ #define MFC_V6_BIT	BIT(1)
+ #define MFC_V7_BIT	BIT(2)
+ #define MFC_V8_BIT	BIT(3)
++#define MFC_V9_BIT	BIT(4)
+ #define MFC_V10_BIT	BIT(5)
+ 
+ #define MFC_V5PLUS_BITS		(MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT | \
+-					MFC_V8_BIT | MFC_V10_BIT)
++					MFC_V8_BIT | MFC_V9_BIT | MFC_V10_BIT)
+ #define MFC_V6PLUS_BITS		(MFC_V6_BIT | MFC_V7_BIT | MFC_V8_BIT | \
++					MFC_V9_BIT | MFC_V10_BIT)
++#define MFC_V7PLUS_BITS		(MFC_V7_BIT | MFC_V8_BIT | MFC_V9_BIT | \
+ 					MFC_V10_BIT)
+-#define MFC_V7PLUS_BITS		(MFC_V7_BIT | MFC_V8_BIT | MFC_V10_BIT)
++#define MFC_V8PLUS_BITS		(MFC_V8_BIT | MFC_V9_BIT | MFC_V10_BIT)
++#define MFC_V9PLUS_BITS		(MFC_V9_BIT | MFC_V10_BIT)
+ 
+ #endif /* S5P_MFC_COMMON_H_ */
+diff --git a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_dec.c b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_dec.c
+index 268ffe4da..2d550035b 100644
+--- a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_dec.c
++++ b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_dec.c
+@@ -42,6 +42,13 @@ static struct s5p_mfc_fmt formats[] = {
+ 		.num_planes	= 2,
+ 		.versions	= MFC_V5_BIT,
+ 	},
++	{
++		.fourcc		= V4L2_PIX_FMT_NV12,
++		.codec_mode	= S5P_MFC_CODEC_NONE,
++		.type		= MFC_FMT_RAW,
++		.num_planes	= 1,
++		.versions	= MFC_V8PLUS_BITS,
++	},
+ 	{
+ 		.fourcc		= V4L2_PIX_FMT_NV12M,
+ 		.codec_mode	= S5P_MFC_CODEC_NONE,
+@@ -146,7 +153,7 @@ static struct s5p_mfc_fmt formats[] = {
+ 		.codec_mode	= S5P_FIMV_CODEC_HEVC_DEC,
+ 		.type		= MFC_FMT_DEC,
+ 		.num_planes	= 1,
+-		.versions	= MFC_V10_BIT,
++		.versions	= MFC_V9PLUS_BITS,
+ 		.flags		= V4L2_FMT_FLAG_DYN_RESOLUTION |
+ 				  V4L2_FMT_FLAG_CONTINUOUS_BYTESTREAM,
+ 	},
+@@ -155,7 +162,7 @@ static struct s5p_mfc_fmt formats[] = {
+ 		.codec_mode	= S5P_FIMV_CODEC_VP9_DEC,
+ 		.type		= MFC_FMT_DEC,
+ 		.num_planes	= 1,
+-		.versions	= MFC_V10_BIT,
++		.versions	= MFC_V9PLUS_BITS,
+ 		.flags		= V4L2_FMT_FLAG_DYN_RESOLUTION,
+ 	},
+ };
+@@ -259,7 +266,9 @@ static int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
+ 	/* Context is to set buffers */
+ 	if (ctx->src_queue_cnt >= 1 &&
+ 	    ctx->state == MFCINST_HEAD_PARSED &&
+-	    ctx->capture_state == QUEUE_BUFS_MMAPED)
++	    ctx->capture_state == QUEUE_BUFS_MMAPED &&
++	    (ctx->vq_dst.memory != V4L2_MEMORY_DMABUF ||
++	     ctx->dst_queue_cnt >= ctx->pb_count))
+ 		return 1;
+ 	/* Resolution change */
+ 	if ((ctx->state == MFCINST_RES_CHANGE_INIT ||
+@@ -337,32 +346,33 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
+ 	mfc_debug_enter();
+ 	pix_mp = &f->fmt.pix_mp;
+ 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
+-	    (ctx->state == MFCINST_GOT_INST || ctx->state ==
+-						MFCINST_RES_CHANGE_END)) {
+-		/* If the MFC is parsing the header,
+-		 * so wait until it is finished */
+-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_SEQ_DONE_RET,
+-									0);
++	    ctx->src_queue_cnt > 0 &&
++	    (ctx->state == MFCINST_GOT_INST ||
++	     ctx->state == MFCINST_RES_CHANGE_END)) {
++		/* Wait only if bitstream is already queued for header parse */
++		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+ 	}
+ 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
+-	    ctx->state >= MFCINST_HEAD_PARSED &&
+-	    ctx->state < MFCINST_ABORT) {
++	    ctx->state != MFCINST_ABORT && ctx->state != MFCINST_ERROR) {
+ 		/* This is run on CAPTURE (decode output) */
+-		/* Width and height are set to the dimensions
+-		   of the movie, the buffer is bigger and
+-		   further processing stages should crop to this
+-		   rectangle. */
+-		pix_mp->width = ctx->buf_width;
+-		pix_mp->height = ctx->buf_height;
++		int w = ctx->buf_width ? ctx->buf_width : 128;
++		int h = ctx->buf_height ? ctx->buf_height : 128;
++		int lsize = ctx->luma_size ? ctx->luma_size : (w * h);
++		int csize = ctx->chroma_size ? ctx->chroma_size : (w * (h >> 1));
++
++		pix_mp->width = w;
++		pix_mp->height = h;
+ 		pix_mp->field = V4L2_FIELD_NONE;
+-		pix_mp->num_planes = 2;
+-		/* Set pixelformat to the format in which MFC
+-		   outputs the decoded frame */
++		pix_mp->num_planes = ctx->dst_fmt->num_planes;
+ 		pix_mp->pixelformat = ctx->dst_fmt->fourcc;
+-		pix_mp->plane_fmt[0].bytesperline = ctx->buf_width;
+-		pix_mp->plane_fmt[0].sizeimage = ctx->luma_size;
+-		pix_mp->plane_fmt[1].bytesperline = ctx->buf_width;
+-		pix_mp->plane_fmt[1].sizeimage = ctx->chroma_size;
++		pix_mp->plane_fmt[0].bytesperline = w;
++		if (ctx->dst_fmt->num_planes == 1) {
++			pix_mp->plane_fmt[0].sizeimage = lsize + csize;
++		} else {
++			pix_mp->plane_fmt[0].sizeimage = lsize;
++			pix_mp->plane_fmt[1].bytesperline = w;
++			pix_mp->plane_fmt[1].sizeimage = csize;
++		}
+ 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+ 		/* This is run on OUTPUT
+ 		   The buffer contains compressed image
+@@ -433,7 +443,10 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
+ 	pix_mp = &f->fmt.pix_mp;
+ 	if (ret)
+ 		return ret;
+-	if (vb2_is_streaming(&ctx->vq_src) || vb2_is_streaming(&ctx->vq_dst)) {
++	if ((f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
++	     vb2_is_streaming(&ctx->vq_src)) ||
++	    (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
++	     vb2_is_streaming(&ctx->vq_dst))) {
+ 		v4l2_err(&dev->v4l2_dev, "%s queue busy\n", __func__);
+ 		ret = -EBUSY;
+ 		goto out;
+@@ -441,6 +454,32 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
+ 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+ 		/* dst_fmt is validated by call to vidioc_try_fmt */
+ 		ctx->dst_fmt = find_format(f, MFC_FMT_RAW);
++		if (ctx->state < MFCINST_HEAD_PARSED) {
++			int w = pix_mp->width ? ALIGN(pix_mp->width,
++				(ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV12) ? 64 : 16) : 128;
++			int h = pix_mp->height ? ALIGN(pix_mp->height, 16) : 128;
++
++			ctx->buf_width = w;
++			ctx->buf_height = h;
++			ctx->luma_size = w * h;
++			ctx->chroma_size = w * (h >> 1);
++			pix_mp->width = w;
++			pix_mp->height = h;
++		} else {
++			s5p_mfc_hw_call(dev->mfc_ops, dec_calc_dpb_size, ctx);
++			pix_mp->width = ctx->buf_width;
++			pix_mp->height = ctx->buf_height;
++		}
++		pix_mp->num_planes = ctx->dst_fmt->num_planes;
++		pix_mp->plane_fmt[0].bytesperline = ctx->buf_width;
++		if (ctx->dst_fmt->num_planes == 1) {
++			pix_mp->plane_fmt[0].sizeimage =
++				ctx->luma_size + ctx->chroma_size;
++		} else {
++			pix_mp->plane_fmt[0].sizeimage = ctx->luma_size;
++			pix_mp->plane_fmt[1].bytesperline = ctx->buf_width;
++			pix_mp->plane_fmt[1].sizeimage = ctx->chroma_size;
++		}
+ 		ret = 0;
+ 		goto out;
+ 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+@@ -454,7 +493,7 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
+ 			pix_mp->plane_fmt[0].sizeimage = ctx->dec_src_buf_size =
+ 								DEF_CPB_SIZE;
+ 		else if (pix_mp->plane_fmt[0].sizeimage > buf_size->cpb)
+-			ctx->dec_src_buf_size = buf_size->cpb;
++			pix_mp->plane_fmt[0].sizeimage = ctx->dec_src_buf_size = buf_size->cpb;
+ 		else
+ 			ctx->dec_src_buf_size = pix_mp->plane_fmt[0].sizeimage;
+ 		pix_mp->plane_fmt[0].bytesperline = 0;
+@@ -484,6 +523,7 @@ static int reqbufs_output(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
+ 		ret = vb2_reqbufs(&ctx->vq_src, reqbufs);
+ 		if (ret)
+ 			goto out;
++		memset(ctx->src_bufs, 0, sizeof(ctx->src_bufs));
+ 		ctx->src_bufs_cnt = 0;
+ 		ctx->output_state = QUEUE_FREE;
+ 	} else if (ctx->output_state == QUEUE_FREE) {
+@@ -533,7 +573,16 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
+ 		if (ret)
+ 			goto out;
+ 		s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers, ctx);
++		memset(ctx->dst_bufs, 0, sizeof(ctx->dst_bufs));
+ 		ctx->dst_bufs_cnt = 0;
++		ctx->capture_state = QUEUE_FREE;
++	} else if (ctx->capture_state == QUEUE_FREE &&
++		   ctx->state < MFCINST_HEAD_PARSED) {
++		/* Pre-SEQ_DONE setup (e.g. v4l2_codec2 initial EOS buffer) */
++		ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
++		if (ret)
++			goto out;
++		ctx->capture_state = QUEUE_BUFS_REQUESTED;
+ 	} else if (ctx->capture_state == QUEUE_FREE) {
+ 		WARN_ON(ctx->dst_bufs_cnt != 0);
+ 		mfc_debug(2, "Allocating %d buffers for CAPTURE queue\n",
+@@ -555,6 +604,14 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
+ 			goto out;
+ 		}
+ 
++		if (reqbufs->memory == V4L2_MEMORY_DMABUF) {
++			/*
++			 * DMABUF fds are attached lazily at QBUF; defer
++			 * CH_INIT_BUFS until buf_init binds all DPB slots.
++			 */
++			goto out;
++		}
++
+ 		WARN_ON(ctx->dst_bufs_cnt != ctx->total_dpb_count);
+ 		ctx->capture_state = QUEUE_BUFS_MMAPED;
+ 
+@@ -581,8 +638,9 @@ static int vidioc_reqbufs(struct file *file, void *priv,
+ 	struct s5p_mfc_dev *dev = video_drvdata(file);
+ 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
+ 
+-	if (reqbufs->memory != V4L2_MEMORY_MMAP) {
+-		mfc_debug(2, "Only V4L2_MEMORY_MMAP is supported\n");
++	if (reqbufs->memory != V4L2_MEMORY_MMAP &&
++	    reqbufs->memory != V4L2_MEMORY_DMABUF) {
++		mfc_debug(2, "Unsupported memory type %d\n", reqbufs->memory);
+ 		return -EINVAL;
+ 	}
+ 
+@@ -604,19 +662,25 @@ static int vidioc_querybuf(struct file *file, void *priv,
+ 	int ret;
+ 	int i;
+ 
+-	if (buf->memory != V4L2_MEMORY_MMAP) {
+-		mfc_err("Only mmapped buffers can be used\n");
++	if (buf->memory != V4L2_MEMORY_MMAP &&
++	    buf->memory != V4L2_MEMORY_DMABUF) {
++		mfc_err("Unsupported memory type %d\n", buf->memory);
+ 		return -EINVAL;
+ 	}
+ 	mfc_debug(2, "State: %d, buf->type: %d\n", ctx->state, buf->type);
+-	if (ctx->state == MFCINST_GOT_INST &&
+-			buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
++	if (buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
++	    (ctx->state == MFCINST_GOT_INST ||
++	     buf->memory == V4L2_MEMORY_DMABUF)) {
+ 		ret = vb2_querybuf(&ctx->vq_src, buf);
+-	} else if (ctx->state == MFCINST_RUNNING &&
+-			buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
++	} else if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
++		   (ctx->state == MFCINST_RUNNING ||
++		    ctx->capture_state >= QUEUE_BUFS_REQUESTED ||
++		    buf->memory == V4L2_MEMORY_DMABUF)) {
+ 		ret = vb2_querybuf(&ctx->vq_dst, buf);
+-		for (i = 0; i < buf->length; i++)
+-			buf->m.planes[i].m.mem_offset += DST_QUEUE_OFF_BASE;
++		if (ret == 0 && buf->memory == V4L2_MEMORY_MMAP) {
++			for (i = 0; i < buf->length; i++)
++				buf->m.planes[i].m.mem_offset += DST_QUEUE_OFF_BASE;
++		}
+ 	} else {
+ 		mfc_err("vidioc_querybuf called in an inappropriate state\n");
+ 		ret = -EINVAL;
+@@ -752,6 +816,10 @@ static int s5p_mfc_dec_g_v_ctrl(struct v4l2_ctrl *ctrl)
+ 		    ctx->state < MFCINST_ABORT) {
+ 			ctrl->val = ctx->pb_count;
+ 			break;
++		} else if (ctx->state < MFCINST_HEAD_PARSED &&
++			   ctx->src_queue_cnt == 0) {
++			ctrl->val = 1;
++			break;
+ 		} else if (ctx->state != MFCINST_INIT &&
+ 				ctx->state != MFCINST_RES_CHANGE_END) {
+ 			v4l2_err(&dev->v4l2_dev, "Decoding not initialised\n");
+@@ -834,6 +902,20 @@ static int vidioc_g_selection(struct file *file, void *priv,
+ 	return 0;
+ }
+ 
++static int vidioc_try_decoder_cmd(struct file *file, void *priv,
++				  struct v4l2_decoder_cmd *cmd)
++{
++	switch (cmd->cmd) {
++	case V4L2_DEC_CMD_STOP:
++	case V4L2_DEC_CMD_START:
++		if (cmd->flags != 0)
++			return -EINVAL;
++		return 0;
++	default:
++		return -EINVAL;
++	}
++}
++
+ static int vidioc_decoder_cmd(struct file *file, void *priv,
+ 			      struct v4l2_decoder_cmd *cmd)
+ {
+@@ -862,19 +944,60 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
+ 			mfc_err("EOS: marking last buffer of stream");
+ 			buf = list_entry(ctx->src_queue.prev,
+ 						struct s5p_mfc_buf, list);
+-			if (buf->flags & MFC_BUF_FLAG_USED)
++			if (ctx->state >= MFCINST_RUNNING &&
++			    (buf->flags & MFC_BUF_FLAG_USED))
+ 				ctx->state = MFCINST_FINISHING;
+ 			else
+ 				buf->flags |= MFC_BUF_FLAG_EOS;
+ 			spin_unlock_irqrestore(&dev->irqlock, flags);
+ 		}
+ 		break;
++	case V4L2_DEC_CMD_START:
++		if (cmd->flags != 0)
++			return -EINVAL;
++		spin_lock_irqsave(&dev->irqlock, flags);
++		if (ctx->state == MFCINST_FINISHED ||
++		    ctx->state == MFCINST_FINISHING)
++			ctx->state = MFCINST_RUNNING;
++		if (s5p_mfc_ctx_ready(ctx))
++			set_work_bit_irqsave(ctx);
++		spin_unlock_irqrestore(&dev->irqlock, flags);
++		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
++		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 	return 0;
+ }
+ 
++/* Enumerate supported frame sizes for V4L2 Codec2 */
++static int vidioc_enum_framesizes(struct file *file, void *priv,
++				  struct v4l2_frmsizeenum *fsize)
++{
++	struct s5p_mfc_dev *dev = video_drvdata(file);
++	int i;
++
++	if (fsize->index != 0)
++		return -EINVAL;
++
++	for (i = 0; i < NUM_FORMATS; i++) {
++		if (formats[i].fourcc == fsize->pixel_format &&
++		    (dev->variant->version_bit & formats[i].versions))
++			break;
++	}
++	if (i == NUM_FORMATS)
++		return -EINVAL;
++
++	fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
++	fsize->stepwise.min_width = 32;
++	fsize->stepwise.max_width = IS_MFCV8_PLUS(dev) ? 3840 : 1920;
++	fsize->stepwise.step_width = 16;
++	fsize->stepwise.min_height = 32;
++	fsize->stepwise.max_height = IS_MFCV8_PLUS(dev) ? 2160 : 1088;
++	fsize->stepwise.step_height = 16;
++	return 0;
++}
++
+ static int vidioc_subscribe_event(struct v4l2_fh *fh,
+ 				const struct  v4l2_event_subscription *sub)
+ {
+@@ -892,6 +1015,7 @@ static int vidioc_subscribe_event(struct v4l2_fh *fh,
+ /* v4l2_ioctl_ops */
+ static const struct v4l2_ioctl_ops s5p_mfc_dec_ioctl_ops = {
+ 	.vidioc_querycap = vidioc_querycap,
++	.vidioc_enum_framesizes = vidioc_enum_framesizes,
+ 	.vidioc_enum_fmt_vid_cap = vidioc_enum_fmt_vid_cap,
+ 	.vidioc_enum_fmt_vid_out = vidioc_enum_fmt_vid_out,
+ 	.vidioc_g_fmt_vid_cap_mplane = vidioc_g_fmt,
+@@ -908,6 +1032,7 @@ static const struct v4l2_ioctl_ops s5p_mfc_dec_ioctl_ops = {
+ 	.vidioc_streamon = vidioc_streamon,
+ 	.vidioc_streamoff = vidioc_streamoff,
+ 	.vidioc_g_selection = vidioc_g_selection,
++	.vidioc_try_decoder_cmd = vidioc_try_decoder_cmd,
+ 	.vidioc_decoder_cmd = vidioc_decoder_cmd,
+ 	.vidioc_subscribe_event = vidioc_subscribe_event,
+ 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
+@@ -933,15 +1058,16 @@ static int s5p_mfc_queue_setup(struct vb2_queue *vq,
+ 			*buf_count = MFC_MAX_BUFFERS;
+ 	/* Video capture for decoding (destination)
+ 	 * this can be set after the header was parsed */
+-	} else if (ctx->state == MFCINST_HEAD_PARSED &&
+-		   vq->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+-		/* Output plane count is 2 - one for Y and one for CbCr */
+-		*plane_count = 2;
+-		/* Setup buffer count */
+-		if (*buf_count < ctx->pb_count)
+-			*buf_count = ctx->pb_count;
+-		if (*buf_count > ctx->pb_count + MFC_MAX_EXTRA_DPB)
+-			*buf_count = ctx->pb_count + MFC_MAX_EXTRA_DPB;
++	} else if (vq->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
++		   (ctx->state == MFCINST_HEAD_PARSED ||
++		    ctx->state < MFCINST_HEAD_PARSED)) {
++		unsigned int min_bufs = (ctx->state >= MFCINST_HEAD_PARSED && ctx->pb_count)
++					? ctx->pb_count : 1;
++		*plane_count = ctx->dst_fmt->num_planes;
++		if (*buf_count < min_bufs)
++			*buf_count = min_bufs;
++		if (*buf_count > min_bufs + MFC_MAX_EXTRA_DPB)
++			*buf_count = min_bufs + MFC_MAX_EXTRA_DPB;
+ 		if (*buf_count > MFC_MAX_BUFFERS)
+ 			*buf_count = MFC_MAX_BUFFERS;
+ 	} else {
+@@ -951,16 +1077,22 @@ static int s5p_mfc_queue_setup(struct vb2_queue *vq,
+ 	}
+ 	mfc_debug(2, "Buffer count=%d, plane count=%d\n",
+ 						*buf_count, *plane_count);
+-	if (ctx->state == MFCINST_HEAD_PARSED &&
+-	    vq->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+-		psize[0] = ctx->luma_size;
+-		psize[1] = ctx->chroma_size;
++	if (vq->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
++		int lsize = ctx->luma_size ? ctx->luma_size : (128 * 128);
++		int csize = ctx->chroma_size ? ctx->chroma_size : (128 * 64);
+ 
+-		if (IS_MFCV6_PLUS(dev))
++		if (ctx->dst_fmt->num_planes == 1) {
++			psize[0] = lsize + csize;
+ 			alloc_devs[0] = ctx->dev->mem_dev[BANK_L_CTX];
+-		else
+-			alloc_devs[0] = ctx->dev->mem_dev[BANK_R_CTX];
+-		alloc_devs[1] = ctx->dev->mem_dev[BANK_L_CTX];
++		} else {
++			psize[0] = lsize;
++			psize[1] = csize;
++			if (IS_MFCV6_PLUS(dev))
++				alloc_devs[0] = ctx->dev->mem_dev[BANK_L_CTX];
++			else
++				alloc_devs[0] = ctx->dev->mem_dev[BANK_R_CTX];
++			alloc_devs[1] = ctx->dev->mem_dev[BANK_L_CTX];
++		}
+ 	} else if (vq->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
+ 		   ctx->state == MFCINST_INIT) {
+ 		psize[0] = ctx->dec_src_buf_size;
+@@ -980,7 +1112,10 @@ static int s5p_mfc_buf_init(struct vb2_buffer *vb)
+ 	unsigned int i;
+ 
+ 	if (vq->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+-		if (ctx->capture_state == QUEUE_BUFS_MMAPED)
++		bool is_new;
++
++		if (vq->memory == V4L2_MEMORY_MMAP &&
++		    ctx->capture_state == QUEUE_BUFS_MMAPED)
+ 			return 0;
+ 		for (i = 0; i < ctx->dst_fmt->num_planes; i++) {
+ 			if (IS_ERR_OR_NULL(ERR_PTR(
+@@ -989,34 +1124,58 @@ static int s5p_mfc_buf_init(struct vb2_buffer *vb)
+ 				return -EINVAL;
+ 			}
+ 		}
+-		if (vb2_plane_size(vb, 0) < ctx->luma_size ||
+-			vb2_plane_size(vb, 1) < ctx->chroma_size) {
+-			mfc_err("Plane buffer (CAPTURE) is too small\n");
+-			return -EINVAL;
+-		}
+ 		i = vb->index;
++		is_new = !ctx->dst_bufs[i].b;
+ 		ctx->dst_bufs[i].b = vbuf;
+-		ctx->dst_bufs[i].cookie.raw.luma =
++		if (ctx->dst_fmt->num_planes == 1) {
++			unsigned long luma_sz = ctx->buf_width * ctx->buf_height;
++			if (vb2_plane_size(vb, 0) < ctx->luma_size + ctx->chroma_size) {
++				mfc_err("Single-plane CAPTURE buffer too small (%lu < %d)\n",
++					vb2_plane_size(vb, 0), ctx->luma_size + ctx->chroma_size);
++				return -EINVAL;
++			}
++			ctx->dst_bufs[i].cookie.raw.luma =
++					vb2_dma_contig_plane_dma_addr(vb, 0);
++			ctx->dst_bufs[i].cookie.raw.chroma =
++				ctx->dst_bufs[i].cookie.raw.luma + luma_sz;
++		} else {
++			if (vb2_plane_size(vb, 0) < ctx->luma_size ||
++			    vb2_plane_size(vb, 1) < ctx->chroma_size) {
++				mfc_err("Plane buffer (CAPTURE) is too small\n");
++				return -EINVAL;
++			}
++			ctx->dst_bufs[i].cookie.raw.luma =
+ 					vb2_dma_contig_plane_dma_addr(vb, 0);
+-		ctx->dst_bufs[i].cookie.raw.chroma =
++			ctx->dst_bufs[i].cookie.raw.chroma =
+ 					vb2_dma_contig_plane_dma_addr(vb, 1);
+-		ctx->dst_bufs_cnt++;
++		}
++		if (is_new)
++			ctx->dst_bufs_cnt++;
++		if (vq->memory == V4L2_MEMORY_DMABUF &&
++		    ctx->state >= MFCINST_HEAD_PARSED &&
++		    ctx->capture_state == QUEUE_BUFS_REQUESTED &&
++		    ctx->dst_bufs_cnt == ctx->total_dpb_count)
++			ctx->capture_state = QUEUE_BUFS_MMAPED;
+ 	} else if (vq->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
++		bool is_new;
+ 		if (IS_ERR_OR_NULL(ERR_PTR(
+ 					vb2_dma_contig_plane_dma_addr(vb, 0)))) {
+ 			mfc_err("Plane memory not allocated\n");
+ 			return -EINVAL;
+ 		}
+-		if (vb2_plane_size(vb, 0) < ctx->dec_src_buf_size) {
++		if (vq->memory == V4L2_MEMORY_MMAP &&
++		    vb2_plane_size(vb, 0) < ctx->dec_src_buf_size) {
+ 			mfc_err("Plane buffer (OUTPUT) is too small\n");
+ 			return -EINVAL;
+ 		}
+ 
+ 		i = vb->index;
++		is_new = !ctx->src_bufs[i].b;
+ 		ctx->src_bufs[i].b = vbuf;
+ 		ctx->src_bufs[i].cookie.stream =
+ 					vb2_dma_contig_plane_dma_addr(vb, 0);
+-		ctx->src_bufs_cnt++;
++		if (is_new)
++			ctx->src_bufs_cnt++;
+ 	} else {
+ 		mfc_err("s5p_mfc_buf_init: unknown queue type\n");
+ 		return -EINVAL;
+@@ -1062,9 +1221,9 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
+ 		s5p_mfc_cleanup_queue(&ctx->dst_queue, &ctx->vq_dst);
+ 		INIT_LIST_HEAD(&ctx->dst_queue);
+ 		ctx->dst_queue_cnt = 0;
+-		ctx->dpb_flush_flag = 1;
+ 		ctx->dec_dst_flag = 0;
+ 		if (IS_MFCV6_PLUS(dev) && (ctx->state == MFCINST_RUNNING)) {
++			ctx->dpb_flush_flag = 1;
+ 			ctx->state = MFCINST_FLUSH;
+ 			set_work_bit_irqsave(ctx);
+ 			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+@@ -1203,7 +1362,9 @@ void s5p_mfc_dec_init(struct s5p_mfc_ctx *ctx)
+ 	struct v4l2_format f;
+ 	f.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_H264;
+ 	ctx->src_fmt = find_format(&f, MFC_FMT_DEC);
+-	if (IS_MFCV8_PLUS(ctx->dev))
++	if (IS_MFCV9_PLUS(ctx->dev))
++		f.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12;
++	else if (IS_MFCV8_PLUS(ctx->dev))
+ 		f.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12M;
+ 	else if (IS_MFCV6_PLUS(ctx->dev))
+ 		f.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12MT_16X16;
+diff --git a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_opr_v6.c b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_opr_v6.c
+index c0df5ac9f..447a5582b 100644
+--- a/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_opr_v6.c
++++ b/drivers/media/platform/samsung/s5p-mfc/s5p_mfc_opr_v6.c
+@@ -133,7 +133,7 @@ static int s5p_mfc_alloc_codec_buffers_v6(struct s5p_mfc_ctx *ctx)
+ 	switch (ctx->codec_mode) {
+ 	case S5P_MFC_CODEC_H264_DEC:
+ 	case S5P_MFC_CODEC_H264_MVC_DEC:
+-		if (IS_MFCV10(dev))
++		if (IS_MFCV9_PLUS(dev))
+ 			mfc_debug(2, "Use min scratch buffer size\n");
+ 		else if (IS_MFCV8_PLUS(dev))
+ 			ctx->scratch_buf_size =
+@@ -152,7 +152,7 @@ static int s5p_mfc_alloc_codec_buffers_v6(struct s5p_mfc_ctx *ctx)
+ 			(ctx->mv_count * ctx->mv_size);
+ 		break;
+ 	case S5P_MFC_CODEC_MPEG4_DEC:
+-		if (IS_MFCV10(dev))
++		if (IS_MFCV9_PLUS(dev))
+ 			mfc_debug(2, "Use min scratch buffer size\n");
+ 		else if (IS_MFCV7_PLUS(dev)) {
+ 			ctx->scratch_buf_size =
+@@ -172,7 +172,7 @@ static int s5p_mfc_alloc_codec_buffers_v6(struct s5p_mfc_ctx *ctx)
+ 		break;
+ 	case S5P_MFC_CODEC_VC1RCV_DEC:
+ 	case S5P_MFC_CODEC_VC1_DEC:
+-		if (IS_MFCV10(dev))
++		if (IS_MFCV9_PLUS(dev))
+ 			mfc_debug(2, "Use min scratch buffer size\n");
+ 		else
+ 			ctx->scratch_buf_size =
+@@ -189,7 +189,7 @@ static int s5p_mfc_alloc_codec_buffers_v6(struct s5p_mfc_ctx *ctx)
+ 		ctx->bank2.size = 0;
+ 		break;
+ 	case S5P_MFC_CODEC_H263_DEC:
+-		if (IS_MFCV10(dev))
++		if (IS_MFCV9_PLUS(dev))
+ 			mfc_debug(2, "Use min scratch buffer size\n");
+ 		else
+ 			ctx->scratch_buf_size =
+@@ -201,7 +201,7 @@ static int s5p_mfc_alloc_codec_buffers_v6(struct s5p_mfc_ctx *ctx)
+ 		ctx->bank1.size = ctx->scratch_buf_size;
+ 		break;
+ 	case S5P_MFC_CODEC_VP8_DEC:
+-		if (IS_MFCV10(dev))
++		if (IS_MFCV9_PLUS(dev))
+ 			mfc_debug(2, "Use min scratch buffer size\n");
+ 		else if (IS_MFCV8_PLUS(dev))
+ 			ctx->scratch_buf_size =
+@@ -436,20 +436,31 @@ static int calc_plane(int width, int height)
+ static void s5p_mfc_dec_calc_dpb_size_v6(struct s5p_mfc_ctx *ctx)
+ {
+ 	struct s5p_mfc_dev *dev = ctx->dev;
+-	ctx->buf_width = ALIGN(ctx->img_width, S5P_FIMV_NV12MT_HALIGN_V6);
+-	ctx->buf_height = ALIGN(ctx->img_height, S5P_FIMV_NV12MT_VALIGN_V6);
++
++	if (ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV12) {
++		ctx->buf_width = ALIGN(ctx->img_width, 64);
++		ctx->buf_height = ALIGN(ctx->img_height,
++					S5P_FIMV_NV12MT_VALIGN_V6) + 16;
++		ctx->luma_size = ctx->buf_width * ctx->buf_height;
++		ctx->chroma_size = ctx->buf_width * (ctx->buf_height >> 1);
++	} else {
++		ctx->buf_width = ALIGN(ctx->img_width,
++				       S5P_FIMV_NV12MT_HALIGN_V6);
++		ctx->buf_height = ALIGN(ctx->img_height,
++					S5P_FIMV_NV12MT_VALIGN_V6);
++		ctx->luma_size = calc_plane(ctx->img_width, ctx->img_height);
++		ctx->chroma_size = calc_plane(ctx->img_width,
++					      (ctx->img_height >> 1));
++		if (IS_MFCV8_PLUS(ctx->dev)) {
++			/* MFCv8 needs additional 64 bytes for luma,chroma dpb*/
++			ctx->luma_size += S5P_FIMV_D_ALIGN_PLANE_SIZE_V8;
++			ctx->chroma_size += S5P_FIMV_D_ALIGN_PLANE_SIZE_V8;
++		}
++	}
+ 	mfc_debug(2, "SEQ Done: Movie dimensions %dx%d,\n"
+ 			"buffer dimensions: %dx%d\n", ctx->img_width,
+ 			ctx->img_height, ctx->buf_width, ctx->buf_height);
+ 
+-	ctx->luma_size = calc_plane(ctx->img_width, ctx->img_height);
+-	ctx->chroma_size = calc_plane(ctx->img_width, (ctx->img_height >> 1));
+-	if (IS_MFCV8_PLUS(ctx->dev)) {
+-		/* MFCv8 needs additional 64 bytes for luma,chroma dpb*/
+-		ctx->luma_size += S5P_FIMV_D_ALIGN_PLANE_SIZE_V8;
+-		ctx->chroma_size += S5P_FIMV_D_ALIGN_PLANE_SIZE_V8;
+-	}
+-
+ 	if (ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
+ 			ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC) {
+ 		if (IS_MFCV10(dev)) {
+@@ -501,7 +512,17 @@ static int s5p_mfc_set_dec_stream_buffer_v6(struct s5p_mfc_ctx *ctx,
+ 		ctx->inst_no, buf_addr, strm_size, strm_size);
+ 	writel(strm_size, mfc_regs->d_stream_data_size);
+ 	writel(buf_addr, mfc_regs->d_cpb_buffer_addr);
+-	writel(buf_size->cpb, mfc_regs->d_cpb_buffer_size);
++	{
++		u32 cpb_sz = ctx->dec_src_buf_size ? ctx->dec_src_buf_size : buf_size->cpb;
++		if (!list_empty(&ctx->src_queue) && buf_addr) {
++			struct s5p_mfc_buf *sb = list_entry(ctx->src_queue.next,
++						    struct s5p_mfc_buf, list);
++			size_t psz = vb2_plane_size(&sb->b->vb2_buf, 0);
++			if (psz > 0 && psz < cpb_sz)
++				cpb_sz = psz;
++		}
++		writel(cpb_sz, mfc_regs->d_cpb_buffer_size);
++	}
+ 	writel(start_num_byte, mfc_regs->d_cpb_buffer_offset);
+ 
+ 	mfc_debug_leave();
+@@ -534,10 +555,10 @@ static int s5p_mfc_set_dec_frame_buffer_v6(struct s5p_mfc_ctx *ctx)
+ 	writel(ctx->scratch_buf_size, mfc_regs->d_scratch_buffer_size);
+ 
+ 	if (IS_MFCV8_PLUS(dev)) {
+-		writel(ctx->img_width,
+-			mfc_regs->d_first_plane_dpb_stride_size);
+-		writel(ctx->img_width,
+-			mfc_regs->d_second_plane_dpb_stride_size);
++		u32 stride = (ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV12)
++				? ctx->buf_width : ctx->img_width;
++		writel(stride, mfc_regs->d_first_plane_dpb_stride_size);
++		writel(stride, mfc_regs->d_second_plane_dpb_stride_size);
+ 	}
+ 
+ 	buf_addr1 += ctx->scratch_buf_size;
+@@ -1604,10 +1625,11 @@ static int s5p_mfc_init_decode_v6(struct s5p_mfc_ctx *ctx)
+ 	mfc_debug_enter();
+ 	mfc_debug(2, "InstNo: %d/%d\n", ctx->inst_no,
+ 			S5P_FIMV_CH_SEQ_HEADER_V6);
+-	mfc_debug(2, "BUFs: %08x %08x %08x\n",
+-		  readl(mfc_regs->d_cpb_buffer_addr),
++	mfc_debug(2, "BUFs: cpb_addr=%08x cpb_size=%08x strm_sz=%u offset=%u\n",
+ 		  readl(mfc_regs->d_cpb_buffer_addr),
+-		  readl(mfc_regs->d_cpb_buffer_addr));
++		  readl(mfc_regs->d_cpb_buffer_size),
++		  readl(mfc_regs->d_stream_data_size),
++		  readl(mfc_regs->d_cpb_buffer_offset));
+ 
+ 	/* FMO_ASO_CTRL - 0: Enable, 1: Disable */
+ 	reg |= (fmo_aso_ctrl << S5P_FIMV_D_OPT_FMO_ASO_CTRL_MASK_V6);
+@@ -1811,10 +1833,15 @@ static inline int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx)
+ 	/* Get the next source buffer */
+ 	temp_vb = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
+ 	temp_vb->flags |= MFC_BUF_FLAG_USED;
+-	s5p_mfc_set_dec_stream_buffer_v6(ctx,
+-		vb2_dma_contig_plane_dma_addr(&temp_vb->b->vb2_buf, 0),
+-			ctx->consumed_stream,
+-			temp_vb->b->vb2_buf.planes[0].bytesused);
++	{
++		unsigned int doff = temp_vb->b->vb2_buf.planes[0].data_offset;
++		unsigned int bused = temp_vb->b->vb2_buf.planes[0].bytesused;
++		s5p_mfc_set_dec_stream_buffer_v6(ctx,
++			vb2_dma_contig_plane_dma_addr(&temp_vb->b->vb2_buf, 0),
++			doff + ctx->consumed_stream,
++			bused > doff + ctx->consumed_stream ?
++				bused - doff - ctx->consumed_stream : 0);
++	}
+ 
+ 	dev->curr_ctx = ctx->num;
+ 	if (temp_vb->b->vb2_buf.planes[0].bytesused == 0) {
+@@ -1892,10 +1919,18 @@ static inline void s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
+ 	/* Initializing decoding - parsing header */
+ 	mfc_debug(2, "Preparing to init decoding.\n");
+ 	temp_vb = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
+-	mfc_debug(2, "Header size: %d\n", temp_vb->b->vb2_buf.planes[0].bytesused);
+-	s5p_mfc_set_dec_stream_buffer_v6(ctx,
+-		vb2_dma_contig_plane_dma_addr(&temp_vb->b->vb2_buf, 0), 0,
+-			temp_vb->b->vb2_buf.planes[0].bytesused);
++	mfc_debug(2, "Header size: %d (vaddr=%px cpb=%zu bytes=%16ph)\n",
++		  temp_vb->b->vb2_buf.planes[0].bytesused,
++		  vb2_plane_vaddr(&temp_vb->b->vb2_buf, 0),
++		  ctx->dec_src_buf_size,
++		  vb2_plane_vaddr(&temp_vb->b->vb2_buf, 0));
++	{
++		unsigned int doff = temp_vb->b->vb2_buf.planes[0].data_offset;
++		unsigned int bused = temp_vb->b->vb2_buf.planes[0].bytesused;
++		s5p_mfc_set_dec_stream_buffer_v6(ctx,
++			vb2_dma_contig_plane_dma_addr(&temp_vb->b->vb2_buf, 0),
++			doff, bused > doff ? bused - doff : 0);
++	}
+ 	dev->curr_ctx = ctx->num;
+ 	s5p_mfc_init_decode_v6(ctx);
+ }
+@@ -2455,18 +2490,16 @@ const struct s5p_mfc_regs *s5p_mfc_init_regs_v6_plus(struct s5p_mfc_dev *dev)
+ 	R(e_h264_options, S5P_FIMV_E_H264_OPTIONS_V8);
+ 	R(e_min_scratch_buffer_size, S5P_FIMV_E_MIN_SCRATCH_BUFFER_SIZE_V8);
+ 
+-	if (!IS_MFCV10(dev))
++	if (!IS_MFCV9_PLUS(dev))
+ 		goto done;
+ 
+-	/* Initialize registers used in MFC v10 only.
+-	 * Also, over-write the registers which have
+-	 * a different offset for MFC v10.
+-	 */
+-
+-	/* decoder registers */
++	/* decoder registers introduced in MFC v9+ */
+ 	R(d_static_buffer_addr, S5P_FIMV_D_STATIC_BUFFER_ADDR_V10);
+ 	R(d_static_buffer_size, S5P_FIMV_D_STATIC_BUFFER_SIZE_V10);
+ 
++	if (!IS_MFCV10(dev))
++		goto done;
++
+ 	/* encoder registers */
+ 	R(e_num_t_layer, S5P_FIMV_E_NUM_T_LAYER_V10);
+ 	R(e_hier_qp_layer0, S5P_FIMV_E_HIERARCHICAL_QP_LAYER0_V10);
+diff --git a/drivers/pmdomain/samsung/exynos-pm-domains.c b/drivers/pmdomain/samsung/exynos-pm-domains.c
+index 61bca6365..09e514964 100644
+--- a/drivers/pmdomain/samsung/exynos-pm-domains.c
++++ b/drivers/pmdomain/samsung/exynos-pm-domains.c
+@@ -199,6 +199,22 @@ static const struct exynos_pm_domain_config exynos7420_cam1_cfg = {
+ 	.always_on		= true,
+ };
+ 
++static const struct exynos_pd_reg_bits exynos7420_mfc_sys_pwr[] = {
++	{ 0x1470, BIT(0) },	/* CLKRUN_CMU_MFC_SYS_PWR_REG */
++	{ 0x14b0, BIT(0) },	/* CLKSTOP_CMU_MFC_SYS_PWR_REG */
++	{ 0x14f0, BIT(0) },	/* DISABLE_PLL_CMU_MFC_SYS_PWR_REG */
++	{ 0x1530, BIT(0) },	/* RESET_LOGIC_MFC_SYS_PWR_REG */
++	{ 0x1570, 0x33 },	/* MEMORY_MFC_SYS_PWR_REG */
++	{ 0x15b0, BIT(0) },	/* RESET_CMU_MFC_SYS_PWR_REG */
++};
++
++static const struct exynos_pm_domain_config exynos7420_mfc_cfg = {
++	.local_pwr_cfg		= 0xf,
++	.pd_option		= 0x0102,
++	.sys_pwr_clr		= exynos7420_mfc_sys_pwr,
++	.nr_sys_pwr_clr		= ARRAY_SIZE(exynos7420_mfc_sys_pwr),
++};
++
+ static const struct exynos_pm_domain_config exynos7420_g3d_cfg = {
+ 	.local_pwr_cfg		= 0xf,
+ 	.pd_option		= 0x1101,
+@@ -219,6 +235,9 @@ static const struct of_device_id exynos_pm_domain_of_match[] = {
+ 	}, {
+ 		.compatible = "samsung,exynos7420-cam1-pd",
+ 		.data = &exynos7420_cam1_cfg,
++	}, {
++		.compatible = "samsung,exynos7420-mfc-pd",
++		.data = &exynos7420_mfc_cfg,
+ 	}, {
+ 		.compatible = "samsung,exynos5433-pd",
+ 		.data = &exynos5433_cfg,
+diff --git a/include/dt-bindings/clock/exynos7-clk.h b/include/dt-bindings/clock/exynos7-clk.h
+index e90610135..9acb3e87d 100644
+--- a/include/dt-bindings/clock/exynos7-clk.h
++++ b/include/dt-bindings/clock/exynos7-clk.h
+@@ -41,7 +41,11 @@
+ #define DOUT_SCLK_BUS0_PLL_MIF		31
+ #define SCLK_BUS0_PLL_MIF		32
+ #define MOUT_ACLK_MIF_PLL		33
+-#define TOPC_NR_CLK			34
++#define MOUT_ACLK_MFC_532		34
++#define DOUT_ACLK_MFC_532		35
++#define ACLK_MFC_532			36
++#define ACLK_BUS1_532			37
++#define TOPC_NR_CLK			38
+ 
+ /* TOP0 */
+ #define DOUT_ACLK_PERIC1		1
+@@ -376,4 +380,22 @@
+ #define CLK_MOUT_APOLLO			4
+ #define CLK_SCLK_APOLLO			5
+ #define APOLLO_NR_CLK			6
++
++/* BUS1 */
++#define CLK_ACLK_LH_MFC0		1
++#define CLK_ACLK_LH_MFC1		2
++#define BUS1_NR_CLK			3
++
++/* MFC */
++#define CLK_MOUT_USER_ACLK_MFC_532	1
++#define CLK_DOUT_PCLK_MFC		2
++#define CLK_ACLK_MFC			3
++#define CLK_PCLK_MFC			4
++#define CLK_ACLK_LH_S_MFC_0		5
++#define CLK_ACLK_LH_S_MFC_1		6
++#define CLK_ACLK_MFC_0_SYSMMU		7
++#define CLK_ACLK_MFC_1_SYSMMU		8
++#define CLK_PCLK_MFC_0_SYSMMU		9
++#define CLK_PCLK_MFC_1_SYSMMU		10
++#define MFC_NR_CLK			11
+ #endif /* _DT_BINDINGS_CLOCK_EXYNOS7_H */

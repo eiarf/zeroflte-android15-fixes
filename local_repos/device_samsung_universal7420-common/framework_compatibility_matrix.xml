@@ -12,4 +12,13 @@
             <regex-instance>.*</regex-instance>
         </interface>
     </hal>
+    <!-- AIDL Codec2 HAL from external/v4l2_codec2 on target-level 7 -->
+    <hal format="aidl" optional="true">
+        <name>android.hardware.media.c2</name>
+        <version>1</version>
+        <interface>
+            <name>IComponentStore</name>
+            <regex-instance>.*</regex-instance>
+        </interface>
+    </hal>
 </compatibility-matrix>

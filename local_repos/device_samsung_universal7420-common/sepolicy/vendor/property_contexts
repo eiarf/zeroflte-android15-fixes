@@ -59,3 +59,7 @@ wlan.driver.status               u:object_r:wifi_prop:s0
 
 # Pixel thermal HAL
 persist.vendor.enable.thermal.genl u:object_r:vendor_thermal_prop:s0
+
+# Codec2 (v4l2_codec2)
+ro.vendor.v4l2_codec2.          u:object_r:vendor_codec2_prop:s0
+persist.vendor.v4l2_codec2.     u:object_r:vendor_codec2_prop:s0

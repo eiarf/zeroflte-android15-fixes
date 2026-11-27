@@ -28,3 +28,6 @@ vendor_internal_prop(vendor_sensors_nk_prop)
 
 # Display resolution mode toggle (persist.vendor.display.*)
 vendor_restricted_prop(vendor_display_prop)
+
+# v4l2_codec2 configuration
+vendor_internal_prop(vendor_codec2_prop)

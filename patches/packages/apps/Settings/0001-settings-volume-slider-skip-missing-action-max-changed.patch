@@ -1,0 +1,16 @@
+diff --git a/src/com/android/settings/sound/VolumeSliderPreference.java b/src/com/android/settings/sound/VolumeSliderPreference.java
+index 08d352f..367c0c6 100644
+--- a/src/com/android/settings/sound/VolumeSliderPreference.java
++++ b/src/com/android/settings/sound/VolumeSliderPreference.java
+@@ -77,9 +77,8 @@ public class VolumeSliderPreference extends RestrictedSliderPreference {
+             if (mReceiverRegistered) {
+                 return;
+             }
+-            final IntentFilter filter = new IntentFilter(AudioManager.ACTION_MAX_CHANGED);
+-            context.registerReceiver(this, filter, Context.RECEIVER_NOT_EXPORTED);
+-            mReceiverRegistered = true;
++            // AudioManager.ACTION_MAX_CHANGED is not present in frameworks/base on this tree.
++            return;
+         }
+ 
+         public void unregister(Context context) {

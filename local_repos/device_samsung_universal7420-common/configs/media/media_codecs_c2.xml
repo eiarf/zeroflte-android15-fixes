@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Copyright 2020 The Android Open Source Project / Exynos 7420 MFC v9 -->
+<MediaCodecs>
+    <Decoders>
+        <MediaCodec name="c2.v4l2.avc.decoder" type="video/avc">
+            <Limit name="size" min="32x32" max="3840x2160" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="blocks-per-second" min="1" max="972000" />
+            <Limit name="bitrate" range="1-60000000" />
+            <Limit name="concurrent-instances" max="8" />
+            <Limit name="performance-point-3840x2160" value="30" />
+            <Feature name="adaptive-playback" />
+        </MediaCodec>
+
+        <MediaCodec name="c2.v4l2.hevc.decoder" type="video/hevc">
+            <Limit name="size" min="64x64" max="3840x2160" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="blocks-per-second" min="1" max="972000" />
+            <Limit name="bitrate" range="1-60000000" />
+            <Limit name="concurrent-instances" max="8" />
+            <Limit name="performance-point-3840x2160" value="30" />
+            <Feature name="adaptive-playback" />
+        </MediaCodec>
+
+        <MediaCodec name="c2.v4l2.vp8.decoder" type="video/x-vnd.on2.vp8">
+            <Limit name="size" min="32x32" max="3840x2160" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="blocks-per-second" min="1" max="972000" />
+            <Limit name="bitrate" range="1-60000000" />
+            <Limit name="concurrent-instances" max="8" />
+            <Limit name="performance-point-3840x2160" value="30" />
+            <Feature name="adaptive-playback" />
+        </MediaCodec>
+
+        <MediaCodec name="c2.v4l2.vp9.decoder" type="video/x-vnd.on2.vp9">
+            <Limit name="size" min="64x64" max="3840x2160" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="blocks-per-second" min="1" max="972000" />
+            <Limit name="bitrate" range="1-60000000" />
+            <Limit name="concurrent-instances" max="8" />
+            <Limit name="performance-point-3840x2160" value="30" />
+            <Feature name="adaptive-playback" />
+        </MediaCodec>
+    </Decoders>
+</MediaCodecs>

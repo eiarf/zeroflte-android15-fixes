@@ -57,3 +57,12 @@ wifi.direct.interface=p2p-dev-wlan0
 # USB / ADB default
 persist.sys.usb.config=adb
 ro.zygote.disable_gl_preload=true
+
+# Codec2 (v4l2_codec2 + Exynos 7420 MFC v9 hardware decoder)
+ro.vendor.v4l2_codec2.decoder.supported.h264=true
+ro.vendor.v4l2_codec2.decoder.supported.hevc=true
+ro.vendor.v4l2_codec2.decoder.supported.vp8=true
+ro.vendor.v4l2_codec2.decoder.supported.vp9=true
+ro.vendor.v4l2_codec2.decode_concurrent_instances=8
+debug.stagefright.c2-poolmask=0xf50000
+media.c2.hal.selection=aidl
