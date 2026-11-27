@@ -67,3 +67,43 @@ fi
 
 # Keep Exynos7420 s2idle deep sleep active
 echo deep > /sys/power/mem_sleep 2>/dev/null || true
+
+# 7. Deep-sleep & idle power: runtime PM auto for PCIe root/Wi-Fi, camera, and power domains
+#    (Keep 11400000.audio-subsystem / PL330 DMACs on for audio stability)
+for dev in \
+    /sys/bus/pci/devices/* \
+    /sys/bus/i2c/devices/12-000c \
+    /sys/bus/platform/devices/14000000.csis \
+    /sys/bus/platform/devices/14010000.csis \
+    /sys/bus/platform/devices/14020000.fimc-lite \
+    /sys/bus/platform/devices/14030000.fimc-lite \
+    /sys/bus/platform/devices/105c4040.power-domain \
+    /sys/bus/platform/devices/105c4140.power-domain \
+    /sys/bus/platform/devices/105c4180.power-domain; do
+    if [ -w "$dev/power/control" ]; then
+        echo auto > "$dev/power/control" 2>/dev/null || true
+    fi
+done
+
+# 8. Idle power & Doze tuning built into ROM (eliminates external Magisk workaround):
+#    disable background BLE/Wi-Fi always-scan, skip Doze motion polling (spi1.0 IRQs),
+#    enable cached app freezer, and restrict alarm-waking partnersetup helper.
+(
+    w=0
+    while [ "$w" -lt 25 ]; do
+        if /system/bin/service check settings 2>/dev/null | grep -q "found"; then
+            break
+        fi
+        sleep 1
+        w=$((w + 1))
+    done
+    sleep 2
+    /system/bin/settings put global wifi_scan_always_enabled 0 2>/dev/null || true
+    /system/bin/settings put global ble_scan_always_enabled 0 2>/dev/null || true
+    /system/bin/settings put global device_idle_constants \
+        "light_after_inactive_to=60000,inactive_to=15000,sensing_to=0,locating_to=0,motion_inactive_to=0,idle_after_inactive_to=15000,idle_pending_to=30000,max_idle_pending_to=60000,quick_doze_delay_to=15000" \
+        2>/dev/null || true
+    /system/bin/device_config put activity_manager_native_boot use_freezer true 2>/dev/null || true
+    /system/bin/am set-standby-bucket com.google.android.partnersetup restricted 2>/dev/null || true
+) >/dev/null 2>&1 &
+
