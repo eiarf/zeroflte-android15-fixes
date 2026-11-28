@@ -1,6 +1,6 @@
 # Panduan Verifikasi Pasca-Booting — RisingOS-Revived Android 17 (`zeroflte`)
 
-Gunakan daftar perintah `adb shell` berikut setelah perangkat **Samsung Galaxy S6 Flat (`SM-G920F`)** selesai melakukan booting dan **USB Debugging** diaktifkan, untuk memastikan kernel Linux 6.6.144, SukiSU-Nova, SELinux `Enforcing`, watchdog `dsh_esslog`, seluruh HAL AIDL, ZRAM 2 GiB, grafis Panfrost + `minigbm`, serta Dolby Atmos DAX v3.6 bekerja normal 100%.
+Gunakan daftar perintah `adb shell` berikut setelah perangkat **Samsung Galaxy S6 Flat (`SM-G920F`)** selesai melakukan booting dan **USB Debugging** diaktifkan, untuk memastikan kernel Linux 6.6.144 (`0001..0019`), SukiSU-Nova, SELinux, `deep` sleep (`mem_sleep`), watchdog `dsh_esslog`, seluruh HAL AIDL (termasuk `c2.v4l2.*` MFC v9), ZRAM 2 GiB, dan grafis Panfrost + `minigbm` bekerja normal 100%.
 
 ---
 
@@ -13,7 +13,7 @@ adb shell cat /sys/module/dsh_esslog/parameters/autorecovery
 ```
 **Output sehat yang diharapkan:**
 - `sys.boot_completed`: **`1`**
-- `getenforce`: **`Enforcing`** (tidak boleh `Permissive`)
+- `getenforce`: **`Permissive`** (melalui `patches/system/core/0001-init-selinux-permissive-for-universal7420.patch` pada rilis `rising-17` aktif)
 - `autorecovery`: **`0`** — menandakan watchdog `dsh_esslog` diset `900` di `early-init` dan baru berhasil di-disarm **setelah** `sys.boot_completed=1`.
 
 *(Opsional)* Periksa apakah ada `avc: denied` kritis yang menghambat layanan HAL:
@@ -37,7 +37,7 @@ adb shell lsmod
   ```bash
   adb shell '[ -r /proc/config.gz ] && zcat /proc/config.gz | grep -E "CONFIG_KSU|CONFIG_KPM|CONFIG_CRYPTO_LZ4|CONFIG_ZRAM|CONFIG_BPF"'
   ```
-  (Harus memuat `CONFIG_KSU=y`, `CONFIG_KSU_MANUAL_SU=y`, `# CONFIG_KPM is not set`, `CONFIG_CRYPTO_LZ4=y`).
+  (Harus memuat `CONFIG_KSU=y`, `CONFIG_KSU_MANUAL_SU=y`, `CONFIG_KPM=y`, `CONFIG_CRYPTO_LZ4=y`, plus `slub_debug=FZP,kmalloc-16 stack_depot_disable=on` di `/proc/cmdline` dan `s2idle [deep]` di `/sys/power/mem_sleep`).
 - Untuk menguji akses root **SukiSU-Nova** (`CONFIG_KSU_MANUAL_SU=y`), install APK Manager SukiSU-Nova resmi dan uji izin *su* dari aplikasi terminal / ADB.
 
 ---

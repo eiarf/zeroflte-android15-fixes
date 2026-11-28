@@ -13,13 +13,13 @@ Bundel kerja ini berada di `D:\zeroflte-rising17\` (atau direktori tujuan salina
 
 | Direktori / File | Peran & Isi |
 | :--- | :--- |
-| `manifests/zeroflte_rising17.xml` | Local manifest `.repo/local_manifests/zeroflte.xml` untuk vendor blob (`eiarf/proprietary_vendor_samsung` branch `lineage-22.2-KRNL6.6`), Pixel Thermal (`hardware/google/pixel`), Samsung Hardware (`hardware/samsung`), serta kompatibilitas SlSI/Linaro Exynos (`seventeen` & `lineage-23.2`). |
-| `local_repos/device_samsung_universal7420-common` | Common device tree Exynos 7420 (branch `rising-17-6.6`): HAL AIDL (Camera V3 + `SoftISP` + `gralloc_bridge.cpp`, GNSS V3, NFC V1, IR V1, Light, Vibrator), Sensors Multi-HAL (`sensors.universal7420-iio.so` + `sensors.max86900.so`), `BoardConfigCommon.mk`, `device-common.mk`, sepolicy ketat `Enforcing`, overlay bersih untuk RisingOS 17, `fstab` `/metadata` + ZRAM 2 GiB, `set_resolution.sh`, `releasetools.py`, dan `prebuilt/` (`Image`, `dt.img`, `modules/*.ko`). |
-| `local_repos/device_samsung_zeroflte` | Device tree khusus Galaxy S6 Flat (branch `rising-17-6.6`): `lineage_zeroflte.mk`, `BoardConfig.mk` (`WITH_DEXPREOPT_BOOT_IMG_AND_SYSTEM_SERVER_ONLY := true`), `configs/thermal/thermal_info_config.json`, `configs/nfc/*`, RRO `WifiOverlay`, serta `sepolicy/vendor/file_contexts`. |
+| `manifests/zeroflte_rising17.xml` | Local manifest `.repo/local_manifests/zeroflte.xml` untuk vendor blob (`eiarf/proprietary_vendor_samsung` branch `lineage-24.0-KRNL6.18`), Exynos 7420 SLSI/Linaro HALs (`lineage-21` / `lineage-21.0`), `hardware/samsung`, dan `device/samsung_slsi/sepolicy` (`lineage-24.0`). |
+| `local_repos/device_samsung_universal7420-common` | Common device tree Exynos 7420: HAL AIDL (Camera V3 + `SoftISP` + `gralloc_bridge.cpp`, GNSS V3, NFC V1, IR V1, Light, Vibrator, ChargingControl), Sensors Multi-HAL (`sensors.universal7420-iio.so` + `sensors.max86900.so`), `BoardConfigCommon.mk`, `device-common.mk`, Codec2 AIDL configs/seccomp/sepolicy + `mfc_fw.bin`, `init.power.rc`/`powerhint.json`, `system.prop` (`persist.sys.battery_bypass_supported=true`), `fstab` `/metadata` + ZRAM 2 GiB, `set_resolution.sh`, `releasetools.py`, dan `prebuilt/` (`Image`, `dt.img`, `modules/*.ko`). |
+| `local_repos/device_samsung_zeroflte` | Device tree khusus Galaxy S6 Flat: `lineage_zeroflte.mk`, `BoardConfig.mk` (`WITH_DEXPREOPT_BOOT_IMG_AND_SYSTEM_SERVER_ONLY := true`), `configs/thermal/thermal_info_config.json`, `configs/nfc/*`, RRO `WifiOverlay`, serta `sepolicy/vendor/file_contexts`. |
 | `local_repos/vendor_nk` | Komponen grafis, Wi-Fi, Bluetooth BCM4358 (branch `rising-17`): `hwcomposer.s6kms` (`s6_kms_hwcomposer.cpp` yang mendukung magic handle `0xABCDDCBAU` `CrosGrallocHandle` dan `0x3141592` `S6Gralloc`), prebuilt Mesa Panfrost 24.0.9, firmware `brcmfmac4358-pcie*`, serta `BCM4358A3*.hcd`. (`modem/` sengaja dihapus agar `init.nk-modem.rc` tidak duplikat dengan `universal7420-common/ramdisk/Android.mk`). |
 | `local_repos/vendor_lunaris_dolby` | Repo **Dolby Atmos DAX v3.6** yang sudah dipangkas bersih (branch `rising-17`): hanya menyimpan komponen `_v3_6`, HIDL `vendor.dolby_v3_6.hardware.dms360@2.0-service` (`dms-v36-hal-2-0`), efek audio 32-bit (`libswdap_v3_6.so`, `libhwdap_v3_6.so`), `LunarisDolby` (`org.lunaris.dolby`), dan `XiaomiDolbyResCommon` (tanpa `_sp`, `media.c2`, `ddpdec`, ataupun `mediacodec.te`). |
-| `local_repos/sukisu_nova_kernel` | Source `kernel/` **SukiSU-Nova** (branch `main`) dengan `include/uapi/*.h` yang sudah di-materialize sebagai file asli (bukan symlink Windows rusak) dan `Kbuild` bertimeout `curl --connect-timeout 2 --max-time 3` serta dukungan mode offline `KSU_OFFLINE=1` (fallback versi `31200`). |
-| `patches/` | Total **13 patch**: 1 patch kernel (`patches/kernel/0001-sm_g92x-sukisu-nova-zeroflte-config.patch`), 10 patch platform/HAL (`bionic`, `build/make`, `build/soong`, `external/minigbm`, `frameworks/opt/telephony`, `hardware/interfaces`, `hardware/samsung_slsi-linaro/exynos`, `system/tools/mkbootimg`), 1 patch slimming GApps (`vendor/gms`), dan 1 patch pemangkasan font emoji opsional (`vendor/addons`). |
+| `local_repos/sukisu_nova_kernel` | Source `kernel/` **SukiSU-Nova** dengan `include/uapi/*.h` yang sudah di-materialize sebagai file asli (bukan symlink Windows rusak) dan `Kbuild` bertimeout `curl --connect-timeout 2 --max-time 3` serta dukungan mode offline `KSU_OFFLINE=1` (fallback versi `31200`). |
+| `patches/` | Total **36 patch**: `19` patch kernel (`patches/kernel/0001`..`0019`), `14` patch platform/HAL/Settings/Codec2 (`bionic`, `build/make`, `build/soong`, `external/minigbm`, `external/v4l2_codec2`, `frameworks/{base,native,opt/telephony}`, `hardware/{interfaces,samsung_slsi-linaro/exynos}`, `packages/apps/Settings`, `system/{core,tools/mkbootimg}`), dan `3` patch vendor slimming (`vendor/{addons,gms,rising}`). |
 | `scripts/` | Skrip otomasi server (`server_sync_and_setup.sh`, `apply_patches.sh`, `build_kernel_linux.sh`, `build_rom.sh`, `mkdtbh.py`, `patch_kernel_image.py`) dan verifikator pre-flight (`verify_setup.py`). |
 | `docs/` | Dokumentasi panduan build (`README_BUILD_GUIDE.md`) dan verifikasi pasca-booting (`POST_BOOT_VERIFICATION.md`). |
 
@@ -28,8 +28,8 @@ Bundel kerja ini berada di `D:\zeroflte-rising17\` (atau direktori tujuan salina
 ## 2. Highlight Teknis & Optimasi Hardware (`SM-G920F`)
 
 ### 2.1 Kernel Linux 6.6.144 + SukiSU-Nova + Samsung S-Boot Header
-- Kernel dibangun dari `eiarf/SM_G92X` (`lineage-22.2-android15-6.6`) dengan penggabungan `gki_defconfig` + `zeroflte_gki.fragment` + patch `0001-sm_g92x-sukisu-nova-zeroflte-config.patch`.
-- **SukiSU-Nova built-in**: `CONFIG_KSU=y`, `CONFIG_KSU_MANUAL_SU=y`, dan `# CONFIG_KPM is not set` (KPM dinonaktifkan demi stabilitas kernel 6.6 Exynos 7420).
+- Kernel dibangun dari `eiarf/SM_G92X` (`lineage-22.2-android15-6.6`, base commit `bfc9ce877`) dengan penggabungan `gki_defconfig` + `zeroflte_gki.fragment` + seri patch `patches/kernel/0001`..`0019`.
+- **SukiSU-Nova built-in**: `CONFIG_KSU=y`, `CONFIG_KSU_MANUAL_SU=y`, dan `CONFIG_KPM=y` (`0007`) bersama `slub_debug=FZP,kmalloc-16 stack_depot_disable=on` (`0012`).
 - **Kompatibilitas Bootloader S-Boot**: `scripts/patch_kernel_image.py` memastikan `text_offset=0x205000` pada `Image` arm64, dan `scripts/mkdtbh.py` mengemas `exynos7420-zeroflte.dtb` menjadi `dt.img` berformat **Samsung `DTBH` v2**.
 - **Aturan Kritis Watchdog (`dsh_esslog`)**:
   > [!CAUTION]
@@ -38,9 +38,8 @@ Bundel kerja ini berada di `D:\zeroflte-rising17\` (atau direktori tujuan salina
   > - `on early-init` menyetel `write /sys/module/dsh_esslog/parameters/autorecovery 900` (batas tunggu 15 menit untuk booting awal + dexopt).
   > - Watchdog baru di-disarm (`write /sys/module/dsh_esslog/parameters/autorecovery 0`) pada blok `on property:sys.boot_completed=1`.
 
-### 2.2 SELinux Strict `Enforcing`
-- Tidak ada direktif `permissive` maupun `typepermissive` di seluruh `sepolicy/vendor/*.te`.
-- Seluruh service HAL baru (`camera-provider`, `gnss`, `nfc`, `ir`, `dms-v36-hal-2-0`, `init.postboot.sh`, `minigbm`) memiliki konteks file, genfs, dan domain `.te` lengkap sesuai aturan Treble.
+### 2.2 SELinux Status (`Permissive`)
+- Untuk kompatibilitas penuh seluruh HAL/daemon `zeroflte` Android 17 (termasuk `v4l2_codec2` AIDL, `VFS7XXX` TZ fingerprint, dan `init.postboot.sh`), rilis aktif menyetel `Permissive` melalui `patches/system/core/0001-init-selinux-permissive-for-universal7420.patch`.
 
 ### 2.3 Grafis, Kamera AIDL V3 & Periferal Pure-AIDL
 - **Display & GPU**: Mesa Panfrost 24.0.9 + `hwcomposer.s6kms` + `external/minigbm` (dengan backend `exynos` dumb + Allocator AIDL V3 & Mapper 5 + `gralloc.minigbm.so` 32/64-bit).
@@ -134,7 +133,7 @@ bash ~/zeroflte-rising17/scripts/build_kernel_linux.sh ~/rising17
 Yang dilakukan skrip ini:
 1. Mendeteksi toolchain LLVM/Clang + `ld.lld` (prioritas: AOSP `prebuilts/clang`, lalu `$ANDROID_NDK_HOME`, lalu Clang sistem `/usr/lib/llvm-*/bin` atau `/usr/bin`).
 2. Meng-clone `https://github.com/eiarf/SM_G92X.git` (`lineage-22.2-android15-6.6`) ke `$ROM_DIR/kernel_src/SM_G92X`.
-3. Menyuntikkan `local_repos/sukisu_nova_kernel` ke `drivers/kernelsu` dan memasang `patches/kernel/0001-sm_g92x-sukisu-nova-zeroflte-config.patch`.
+3. Menyuntikkan `local_repos/sukisu_nova_kernel` ke `drivers/kernelsu` dan memasang seluruh `patches/kernel/0001`..`0019` (`build_kernel_linux.sh` memakai penanda SHA-256 idempoten di `.git/zeroflte_patches/`).
 4. Menggabungkan `gki_defconfig` + `zeroflte_gki.fragment`, memverifikasi `CONFIG_KSU=y`, `CONFIG_KSU_MANUAL_SU=y`, `CONFIG_HEADERS_INSTALL=y`, `CONFIG_CRYPTO_LZ4=y`, lalu menjalankan `headers_install` dan menghasilkan `include/generated/dsh_build_id.h` (untuk `dsh_esslog`).
 5. Mengompilasi `Image`, `exynos/exynos7420-zeroflte.dtb`, dan modul `.ko`.
 6. Menjalankan `patch_kernel_image.py` (`text_offset=0x205000`), `mkdtbh.py` (`DTBH` v2), dan menyalin `Image`, `dt.img`, serta seluruh `.ko` ke `$ROM_DIR/device/samsung/universal7420-common/prebuilt/`.
