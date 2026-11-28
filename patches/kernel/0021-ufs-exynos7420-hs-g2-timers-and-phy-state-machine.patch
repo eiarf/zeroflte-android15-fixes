@@ -30,7 +30,7 @@ index 183c88e3d..9ad6da021 100644
  	return 0;
  }
 diff --git a/drivers/ufs/host/ufs-exynos.c b/drivers/ufs/host/ufs-exynos.c
-index f0987fc01..6a09e76ee 100644
+index f0987fc01..dae12a684 100644
 --- a/drivers/ufs/host/ufs-exynos.c
 +++ b/drivers/ufs/host/ufs-exynos.c
 @@ -139,10 +139,19 @@ enum {
@@ -107,48 +107,19 @@ index f0987fc01..6a09e76ee 100644
  			phy_calibrate(generic_phy);
  			break;
  		}
-@@ -1185,12 +1226,27 @@ static int exynos_ufs_parse_dt(struct device *dev, struct exynos_ufs *ufs)
- 	ufs->pclk_avail_min = PCLK_AVAIL_MIN;
- 	ufs->pclk_avail_max = PCLK_AVAIL_MAX;
- 
--	attr->rx_adv_fine_gran_sup_en = RX_ADV_FINE_GRAN_SUP_EN;
--	attr->rx_adv_fine_gran_step = RX_ADV_FINE_GRAN_STEP_VAL;
--	attr->rx_adv_min_actv_time_cap = RX_ADV_MIN_ACTV_TIME_CAP;
--	attr->pa_granularity = PA_GRANULARITY_VAL;
+@@ -1189,7 +1230,14 @@ static int exynos_ufs_parse_dt(struct device *dev, struct exynos_ufs *ufs)
+ 	attr->rx_adv_fine_gran_step = RX_ADV_FINE_GRAN_STEP_VAL;
+ 	attr->rx_adv_min_actv_time_cap = RX_ADV_MIN_ACTV_TIME_CAP;
+ 	attr->pa_granularity = PA_GRANULARITY_VAL;
 -	attr->pa_tactivate = PA_TACTIVATE_VAL;
--	attr->pa_hibern8time = PA_HIBERN8TIME_VAL;
-+	if (ufs->drv_data == &exynos_ufs_drvs) {
-+		/*
-+		 * Match Galaxy S6 / Exynos7420 M-PHY capabilities from stock
-+		 * 3.10 exynos7420-zero_common.dtsi instead of ExynosAutoV9:
-+		 * fine granularity disabled, PA_TActivate = 6 (600 us) so
-+		 * hibern8 exit never races M-PHY wakeup (pa_err 0x80000010).
-+		 */
-+		attr->rx_adv_fine_gran_sup_en = 0;
-+		attr->rx_min_actv_time_cap = 7;
-+		attr->rx_hibern8_time_cap = 5;
-+		attr->pa_granularity = 6;
-+		attr->pa_tactivate = 6;
-+		attr->pa_hibern8time = 20;
-+	} else {
-+		attr->rx_adv_fine_gran_sup_en = RX_ADV_FINE_GRAN_SUP_EN;
-+		attr->rx_adv_fine_gran_step = RX_ADV_FINE_GRAN_STEP_VAL;
-+		attr->rx_adv_min_actv_time_cap = RX_ADV_MIN_ACTV_TIME_CAP;
-+		attr->pa_granularity = PA_GRANULARITY_VAL;
-+		attr->pa_tactivate = PA_TACTIVATE_VAL;
-+		attr->pa_hibern8time = PA_HIBERN8TIME_VAL;
-+	}
++	/*
++	 * Exynos7420 M-PHY needs PA_TActivate = 6 (600 us, matching stock 3.10
++	 * exynos7420-zero_common.dtsi) applied post-link so hibern8 exit does
++	 * not race M-PHY wakeup (pa_err 0x80000010). Keep rx_adv_fine_gran_*
++	 * untouched pre-link so DME_LINK_STARTUP matches stock 6.6 bringup.
++	 */
++	attr->pa_tactivate = (ufs->drv_data == &exynos_ufs_drvs) ?
++			     6 : PA_TACTIVATE_VAL;
+ 	attr->pa_hibern8time = PA_HIBERN8TIME_VAL;
  
  out:
- 	return ret;
-@@ -1308,8 +1364,9 @@ static void exynos_ufs_dev_hw_reset(struct ufs_hba *hba)
- 	struct exynos_ufs *ufs = ufshcd_get_variant(hba);
- 
- 	hci_writel(ufs, 0 << 0, HCI_GPIO_OUT);
--	udelay(5);
-+	udelay(10);
- 	hci_writel(ufs, 1 << 0, HCI_GPIO_OUT);
-+	usleep_range(1000, 1500);
- }
- 
- static void exynos_ufs_pre_hibern8(struct ufs_hba *hba, enum uic_cmd_dme cmd)
