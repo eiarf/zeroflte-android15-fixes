@@ -6,7 +6,8 @@
             "Values": [
                 "9999999",
                 "1600000",
-                "1400000"
+                "1400000",
+                "1200000"
             ],
             "DefaultIndex": 1,
             "ResetOnInit": true
@@ -124,13 +125,13 @@
             "PowerHint": "INTERACTION",
             "Node": "TAUClampBoost",
             "Duration": 80,
-            "Value": "20"
+            "Value": "10"
         },
         {
             "PowerHint": "INTERACTION",
             "Node": "GPUMinFreq",
             "Duration": 80,
-            "Value": "350000000"
+            "Value": "0"
         },
         {
             "PowerHint": "LAUNCH",
@@ -202,7 +203,7 @@
             "PowerHint": "AUDIO_LAUNCH",
             "Node": "PMQoSCpuDmaLatency",
             "Duration": 2000,
-            "Value": "44"
+            "Value": "100"
         },
         {
             "PowerHint": "AUDIO_STREAMING_LOW_LATENCY",
@@ -214,7 +215,7 @@
             "PowerHint": "AUDIO_STREAMING_LOW_LATENCY",
             "Node": "PMQoSCpuDmaLatency",
             "Duration": 0,
-            "Value": "44"
+            "Value": "100"
         },
         {
             "PowerHint": "SUSTAINED_PERFORMANCE",
@@ -226,7 +227,7 @@
             "PowerHint": "SUSTAINED_PERFORMANCE",
             "Node": "CPUBigClusterMaxFreq",
             "Duration": 0,
-            "Value": "1400000"
+            "Value": "1200000"
         },
         {
             "PowerHint": "VR_MODE",
@@ -256,19 +257,19 @@
             "PowerHint": "EXPENSIVE_RENDERING",
             "Node": "TAUClampBoost",
             "Duration": 0,
-            "Value": "20"
+            "Value": "0"
         },
         {
             "PowerHint": "EXPENSIVE_RENDERING",
             "Node": "GPUMinFreq",
             "Duration": 0,
-            "Value": "350000000"
+            "Value": "0"
         },
         {
             "PowerHint": "LOW_POWER",
             "Node": "CPUBigClusterMaxFreq",
             "Duration": 0,
-            "Value": "1400000"
+            "Value": "1200000"
         },
         {
             "PowerHint": "LOW_POWER",
@@ -290,10 +291,10 @@
             "PID_Do": 500.0,
             "PID_Du": 0.0,
             "UclampMin_On": true,
-            "UclampMin_Init": 128,
-            "UclampMin_LoadUp": 320,
-            "UclampMin_LoadReset": 320,
-            "UclampMin_High": 320,
+            "UclampMin_Init": 0,
+            "UclampMin_LoadUp": 128,
+            "UclampMin_LoadReset": 128,
+            "UclampMin_High": 160,
             "UclampMin_Low": 2,
             "UclampMax_EfficientBase": 500,
             "UclampMax_EfficientOffset": 200,
@@ -309,12 +310,12 @@
             "HBoostSevereJankPidPu": 0.25,
             "HBoostSevereJankThreshold": 8,
             "HBoostUclampMinCeilingRange": [
-                320,
-                480
-            ],
-            "HBoostUclampMinFloorRange": [
                 128,
                 256
+            ],
+            "HBoostUclampMinFloorRange": [
+                0,
+                128
             ],
             "JankCheckTimeFactor": 1.2,
             "LowFrameRateThreshold": 25,

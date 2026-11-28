@@ -1,18 +1,18 @@
 {
-    "Sensors":[
+    "Sensors": [
         {
-            "Name":"exynos-therm",
-            "Type":"CPU",
-            "HotThreshold":[
+            "Name": "exynos-therm",
+            "Type": "CPU",
+            "HotThreshold": [
                 "NAN",
-                64.0,
-                70.0,
-                76.0,
-                82.0,
-                88.0,
+                58.0,
+                62.0,
+                66.0,
+                72.0,
+                80.0,
                 105.0
             ],
-            "HotHysteresis":[
+            "HotHysteresis": [
                 0.0,
                 4.0,
                 4.0,
@@ -21,15 +21,15 @@
                 5.0,
                 10.0
             ],
-            "Multiplier":0.001,
-            "Monitor":true,
-            "TripPointIgnorable":true,
-            "PassiveDelay":7000
+            "Multiplier": 0.001,
+            "Monitor": true,
+            "TripPointIgnorable": true,
+            "PassiveDelay": 7000
         },
         {
-            "Name":"battery",
-            "Type":"BATTERY",
-            "HotThreshold":[
+            "Name": "battery",
+            "Type": "BATTERY",
+            "HotThreshold": [
                 "NAN",
                 "NAN",
                 "NAN",
@@ -38,8 +38,8 @@
                 "NAN",
                 60.0
             ],
-            "Multiplier":0.001,
-            "PollingDelay":60000
+            "Multiplier": 0.001,
+            "PollingDelay": 60000
         }
     ]
 }

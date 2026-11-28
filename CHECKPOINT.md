@@ -2,11 +2,11 @@
 
 > **Panduan Singkat:** Dokumen ini mencatat riwayat iterasi perbaikan kernel `Linux 6.6.144-4k`, Camera HAL (`SoftISP` + `ak7345` VCM), `gpsd`/sensor shim, manajemen termal/performa (`ASV0/ASV2 UV` + `powerhint`), proteksi SLUB `kmalloc-16`, dan build full ROM untuk **Samsung Galaxy S6 Flat (`SM-G920F` / `zeroflte`)**. Setiap iterasi (`v0` → `v11`) diuji langsung di unit perangkat fisik (`SM-G920F`, ADB serial `06157df6085a9c3c`).
 
-- **Tanggal/Waktu:** 2026-11-28 13:15 WIB (**FINAL BUILD `261128-0516` (`0001..0018` + Built-In Idle Power) BUILT, FLASHED, SLEEP & 15-MIN NEWTUBE LOFI LIVE VERIFIED — NO RELEASE PUBLISHED PER USER**)
-- **Refinement Aktif di Perangkat (`0001..0018`):** Kernel `0013` (deep sleep + regulator leak fixes) + `0014` (`s5p-mfc` v9 & `external/v4l2_codec2` AIDL) + `0015` (`brcmfmac` `D0_INFORM_IN_USE` + `exynos7_pmu_resume_init()` + CPU0 `ic iallu`) + `0016` (`dsi.0`->`decon` devlink + wake frame refresh + deferred `SET_DISPLAY_ON`) + `0017` (secondary `__cpu_setup` `ic iallu` + `brcmf_pciedrvr_pm` `.suspend_late`/`.resume` guard) + `0018` (`sound`->`11440000.i2s` devlink + `i2s_trigger` `pm_runtime_active` guard) + `init.postboot.sh` built-in idle power
-- **Full ROM Build Terbaru (`user` + GMS):** `RisingOS-9-261128-0516-CORE-COMMUNITY-zeroflte-ota.zip` (`1,599,942,618` bytes, SHA-256: `535cf90db7b5c6a41a3404b4b9be688627fc5daeb0976b65ad285e5a22d28328`) — **Belum dipublish ke GitHub Release sesuai permintaan user**
-- **Boot & Recovery Image (`261128-0516`):** `boot.img` (`26,130,448` bytes, SHA-256: `cd6f0b591d905c4e4bd32c232d1716a32febe66084e0ff07ac8d8b43c726fecb`, kernel `0001..0018`) | `recovery.img` (`35,125,264` bytes, SHA-256: `dbe1ba7ec1f84fa4a668f5b89ef23a09a1ff729f7c4f46c89cbdeaa76aa13fa`)
-- **Kernel:** `Linux 6.6.144-4k` (SukiSU-Nova v4.1.0) | **SELinux:** Permissive
+- **Tanggal/Waktu:** 2026-11-28 17:45 WIB (**FINAL BUILD `261128-1001` (`0001..0019` Non-DMC + `sleep_watchdog=true` + `v4l2_codec2` Flush-Race Fix + Cool Thermal/PowerHAL/CPUset + GameSpace Bypass Charging) BUILT, FLASHED & VERIFIED 15m ON `06157df6085a9c3c` — NO RELEASE PUBLISHED PER USER**)
+- **Refinement Aktif/Terbaru (`0001..0019`):** Kernel `0006` (`sleep_watchdog=true` anti-hang 32s + `WTCON=0` suspend), `0013`–`0018` (`deep` sleep, `s5p-mfc` v9, `brcmfmac`, `decon`/`s6e3ha2`, `i2s`/`wm1840`), **`0019`** (`panfrost` `upthreshold=70/downdiff=10` + thermal trips `58/62/66/72/80/90°C`, **tanpa** `EXYNOS7420_DMC`/`INTERCONNECT`) + `external/v4l2_codec2` (`0001-drop-abandoned-work-on-flush-race.patch`) + `init.power.rc` (`foreground=0,5-7`) + `powerhint.json` (`PMQoSCpuDmaLatency=100`, `GPUMinFreq=0`, lower `AdpfConfig`) + `system.prop` (`ro.surface_flinger.uclamp.min=200`, `persist.sys.battery_bypass_supported=true`) + `thermal_info_config.json` (`58/62/66/72/80/105°C`)
+- **Full ROM Build Terbaru (`user` + GMS):** `RisingOS-9-261128-1001-CORE-COMMUNITY-zeroflte-ota.zip` (`1,599,957,504` bytes, SHA-256: `d10e66e3147b6456575dfea27c263a967f6548e8a993556fdeec9a42b33d7eaa`) — **Ter-flash & terverifikasi di device (`NO GitHub Release` sesuai permintaan user)**
+- **Boot & Recovery Image (`261128-1001`):** `boot.img` (`26,130,448` bytes, SHA-256: `14a64912d3c89055ebda6691d0f122d490c4e6b96c06417741c319ebedc2517a`, kernel `0001..0019` `#2`) | `recovery.img` (`35,131,408` bytes, SHA-256: `5c43f7533f145398204d0af2848a350b3ebfae3ad3658747eff72e956dff9bb7`)
+- **Kernel:** `Linux 6.6.144-4k` (`#2 SMP PREEMPT Sat Nov 28 09:56:37 UTC 2026`, SukiSU-Nova v4.1.0) | **SELinux:** Permissive
 - **Batas Partisi:** `/system` <= `3124019200` bytes (`2979.3 MiB / 2979.3 MiB max` verified) | `boot` <= `29360128` bytes (`28.0 MiB`) | `recovery` <= `35651584` bytes (`34.0 MiB`)
 
 ---
@@ -14,13 +14,14 @@
 ## 1. Do Not Break List (Fitur Terverifikasi Bekerja)
 - [x] Display & Touch (`1440x2560 @ 60Hz`, `s6_kms_hwcomposer` + `s6_drm_gralloc`)
 - [x] Audio Speaker & 3.5mm Jack (`zero_wm1840` jack clamp mode 0x4)
-- [x] Deep Sleep (`s2idle [deep]` built-in via `init.samsung.rc` + `0013` regulator leak fixes [`ak7375`, `max77693-haptic`, `sec_nfc`] + `0006` `sleep_watchdog=false`/`WTCON=0`)
+- [x] Deep Sleep (`s2idle [deep]` built-in via `init.samsung.rc` + `0013` regulator leak fixes [`ak7375`, `max77693-haptic`, `sec_nfc`] + `0006` `sleep_watchdog=true` anti-hang/`WTCON=0`)
 - [x] Rear Camera (`s5c73c2` / `S5K2P2`) — **Terverifikasi cold-boot, viewfinder color/brightness parity, neutral JPEG, dan instant AF lock** (`v9`)
 - [x] Front Camera (`s5k4e6` + `SoftISP`) — **Tetap identik dengan `v4` (`15.3–15.6 fps`, `kBlackLevelFront=64`)**
 - [x] Wi-Fi / BT / RIL / GNSS (`gpsd`/`lhd`/`gnss`) / NFC / IR / Root (`SukiSU-Nova`)
 - [x] Fingerprint Hardware & TZ (`VFS7XXX` `/dev/vfsspi` + `MobiCore` `SYNAFP`/`SEC_SPI_DRIVER` + `libbauthserver.so` shim -> `type_check=1` `VIPER`, `func_ret_val=0`, enroll & auth terverifikasi user)
 - [x] Idle Stability / SLUB `kmalloc-16` Guard (`slub_debug=FZP,kmalloc-16 stack_depot_disable=on` via `0012`) — `sanity_checks=1, red_zone=1, poison=1, store_user=0`
-- [x] Hardware Video Decode (`s5p-mfc` v9 `0014` + `external/v4l2_codec2` AIDL `c2.v4l2.{avc,hevc,vp8,vp9}.decoder` -> `MediaCodec` + `ImageReader` DMABUF `Surface` PASS pada 4 codec, `0` `exynos-sysmmu` faults)
+- [x] Hardware Video Decode (`s5p-mfc` v9 `0014` + `external/v4l2_codec2` AIDL `c2.v4l2.{avc,hevc,vp8,vp9}.decoder` + `0001-drop-abandoned-work-on-flush-race.patch` -> `0` error pada 15m playback & rapid seek)
+- [x] Bypass Charging (`vendor.lineage.health.IChargingControl/default` + `persist.sys.battery_bypass_supported=true` untuk GameSpace & `Settings -> Battery -> Charging control`)
 
 ---
 
@@ -79,7 +80,7 @@
 - `patches/kernel/0003-dma-pl330-guard-tasklet-stop-when-inactive.patch` — PL330 DMA safety
 - `patches/kernel/0004-asoc-zero-wm1840-jack-clamp-mode-0x4.patch` — 3.5mm jack clamp
 - `patches/kernel/0005-camera-s5c73c2-cold-boot-probe-and-i2c-pinctrl-fix.patch` — `cam_i2c0/1` pull-none pinctrl + 3x retry/`i2c_recover_bus`/POR delay in `s5c73c2` (`probe` & `runtime_resume`)
-- `patches/kernel/0006-soc-samsung-disable-sleep-watchdog-during-suspend.patch` — Disable `sleep_watchdog` in `exynos7-pm.c` and clear `WTCON` in `s3c2410_wdt.c` on suspend
+- `patches/kernel/0006-soc-samsung-disable-sleep-watchdog-during-suspend.patch` — Clear `WTCON=0` in `s3c2410_wdt.c` on suspend (`sleep_watchdog=true` dipertahankan di `exynos7-pm.c` sebagai proteksi anti-hang 32s)
 - `patches/kernel/0007-zeroflte-perf-cmdline-lto-net-zram-mountify.patch` — Cmdline (`stack_depot_disable=on`, `loglevel=4`), `ThinLTO` + `-O2`, `CONFIG_KPM=y`, `BBR` + `FQ`, `IPSET` + `IP6_NF_NAT`, `TMPFS_XATTR`/`OVERLAY_FS`, `LZ4HC` *(terverifikasi idempotent pada clean `SM_G92X` worktree)*
 - `patches/kernel/0008-arm64-dts-exynos7420-universal-safe-uv-and-thermal.patch` — Universal-safe ASV0 Big (`1.8 GHz` max, -43.75 s/d -87.5 mV) & ASV2 GPU (-12.5 mV) UV + thermal trip points `64/70/76/82/88/95/105°C` *(terverifikasi idempotent pada clean `SM_G92X` worktree)*
 - `patches/kernel/0009-drm-panfrost-guard-shrinker-purge-against-active-fences.patch` — Guard `panfrost_gem_purge()` terhadap `obj->import_attach` dan active `dma_resv` fences sebelum melepas MMU mapping *(terverifikasi idempotent pada clean `SM_G92X` worktree)*
@@ -93,7 +94,14 @@
 - `patches/vendor/rising/0001-rising-slim-optional-prebuilts-for-small-system.patch` — Gate `OmniStyle`, `OmniJaws`, `AxQuickLook`, and 4 extra bootanimation zips behind `TARGET_SLIM_SYSTEM_EXT=true` (~268.7 MB saved)
 - `local_repos/device_samsung_universal7420-common/` — Updated `prebuilt/{Image,dt.img,modules/*.ko,firmware/mfc_fw.bin}` (`v13`), `configs/media/media_codecs_c2.xml`, `configs/seccomp_policy/android.hardware.media.c2-extended-seccomp_policy`, `device-common.mk`, `framework_compatibility_matrix.xml`, `vendor.prop` (`media.c2.hal.selection=aidl`, `ro.vendor.v4l2_codec2.*`, `c2-poolmask`), `sepolicy/vendor/{file_contexts,mediacodec.te,property.te,property_contexts}`, `ramdisk/etc/{init.samsung.rc,init.samsungexynos7420.rc,ueventd.samsungexynos7420.rc}`
 - `rising17/vendor/samsung/universal7420-common/proprietary/vendor/lib{,64}/{libwrappergps.so,libsensor-mod.so,libbauthserver.so}` — Patched ELF `NEEDED` (`libbauthserver.so` memakai `libbauthtzcommon_shim.so`, diterapkan otomatis oleh `extract-files.sh` saat build penuh berikutnya)
-- `local_repos/device_samsung_zeroflte/` — Updated `configs/thermal/thermal_info_config.json` (`64..105°C`)
+- `patches/kernel/0015-zeroflte-brcmfmac-d0-inform-in-use-and-pmu-resume.patch` — `brcmfmac` `D0_INFORM_IN_USE`, `exynos7_pmu_resume_init()`, & `ic iallu` di `exynos7_pm_resume_entry`
+- `patches/kernel/0016-drm-exynos-decon-panel-deep-sleep-order-and-refresh.patch` — Stateless `device_link_add` DECON<->panel, wake frame refresh, & `SET_DISPLAY_ON` di `.complete()`
+- `patches/kernel/0017-arm64-icache-secondary-and-brcmfmac-suspend-late.patch` — `ic iallu` di `__cpu_setup` & `brcmfmac` `.suspend_late` + guard `BRCMFMAC_PCIE_STATE_UP`
+- `patches/kernel/0018-asoc-samsung-i2s-suspend-order-and-guard.patch` — `zero_wm1840` <-> `i2s` `device_link_add` & guard `pm_runtime_active()` di `i2s_trigger()`
+- `patches/kernel/0019-zeroflte-panfrost-and-cool-thermals.patch` — `panfrost_devfreq` `upthreshold=70/downdifferential=10` & thermal trips `58/62/66/72/80/90°C` (non-DMC)
+- `patches/external/v4l2_codec2/0001-drop-abandoned-work-on-flush-race.patch` — Drop frame usang pasca-flush pada `DecodeComponent::{onDecodeDone,onOutputFrameReady}` agar seek cepat tidak memicu `C2_CORRUPTED (0xe)`
+- `local_repos/device_samsung_universal7420-common/` — Synced `prebuilt/{Image,dt.img,modules/*.ko}`, `ramdisk/etc/init.power.rc` (`foreground=0,5-7`), `configs/power/powerhint.json`, & `system.prop` (`ro.surface_flinger.uclamp.min=200`, `persist.sys.battery_bypass_supported=true`)
+- `local_repos/device_samsung_zeroflte/` — Updated `configs/thermal/thermal_info_config.json` (`58/62/66/72/80/105°C`)
 
 > **Status Sinkronisasi GitHub:** Semua perubahan `v5..v11` (kamera `v9`, `gpsd` shim, fingerprint `0011` + `libbauthserver.so` shim, kernel anti-panic `0012` `slub_debug=FZP,kmalloc-16`, dan `CHECKPOINT.md`) disinkronkan ke `eiarf/zeroflte-android15-fixes` branch **`rising-17`** & `eiarf/proprietary_vendor_samsung` branch **`lineage-24.0-KRNL6.18`**, beserta rilis **`rising17-zeroflte-261126-2136`**.
 
@@ -191,3 +199,38 @@
   - Suhu terukur (`t = 0 / 3 / 6 / 9 / 12 / 15 min`, `12:58:41–13:15:00 WIB`): **`exynos-therm = 71 -> 72 -> 75 -> 76 -> 77 -> 78°C`**, **`battery = 36.0°C` flat** (`97% -> 96%`), `0` `sysmmu` fault, `0` `mfc` error, `0` kernel oops/timeout.
   - Catatan logcat: `gpsd` (`libsensor-mod.so`) tercatat `1x` `SIGABRT` (`getService(SensorService) NULL` saat polling `vndbinder`) di `13:01:11` lalu respawn normal; `Do Not Break List` layanan kamera (`2` devices), fingerprint (`HAL deaths: 0`), audio (`zero-wm1840`), dan Wi-Fi (`wlan0 192.168.1.54/24`) tetap normal.
 - **Artifact Build (`NO GitHub Release`):** `RisingOS-9-261128-0516-CORE-COMMUNITY-zeroflte-ota.zip` (`1,599,942,618` B, SHA-256: `535cf90db7b5c6a41a3404b4b9be688627fc5daeb0976b65ad285e5a22d28328`), `/system` `2979.3 MiB / 2979.3 MiB max`, sudah diunduh lokal dan ter-flash ke `06157df6085a9c3c`.
+
+### Investigasi Termal YouTube Playback, Protokol No-Charging & Build `261128-0648` (`2026-11-28 14:05 WIB`)
+- **Keluhan & Akar Masalah Panas Saat Nonton YouTube (`06157df6085a9c3c` pada `261128-0516`):**
+  - Pengujian baseline NewTube (`MobilePlaybackActivity` tampak layar penuh, `batt_slate_mode=1` tanpa charging) menarik arus **`-1193 s/d -1539 mA`** (`~4.8–6.2 W`) dan mendorong `exynos-therm` hingga **`78–84°C`** serta `battery` **`36.0°C`**.
+  - **Temuan 1 — `CONFIG_EXYNOS7420_DMC` terbuang oleh Kconfig (`LPDDR4 MIF terkunci di 1552 MHz @ 862.5 mV`):** `zeroflte_gki.fragment` mencantumkan `CONFIG_INTERCONNECT_SAMSUNG=y`, `CONFIG_INTERCONNECT_EXYNOS=y`, `CONFIG_EXYNOS7420_DMC=y` tanpa `CONFIG_INTERCONNECT=y`. Akibatnya `exynos7420-dmc` tidak ter-compile (`10800000.memory-controller` tanpa driver) dan `vdd_mif` tetap di `862500 uV` non-stop, alih-alih turun dinamis (`259–836 MHz @ 587.5–712.5 mV`).
+  - **Temuan 2 — `foreground` cpuset terbalik untuk A53/A57 (`init.power.rc`):** Pada kernel 6.6 ini, **Cortex-A53** (`max 1.5 GHz`, `cap=577`) berada pada **`cpu0,5-7`** dan **Cortex-A57** (`max 1.8 GHz`, `cap=1024`) pada **`cpu1-4`**. `foreground/cpus 0-6` menempatkan `SFMainPolicy`, `SFRenderEnginePolicy`, dan proses foreground ke core A57 sekaligus meninggalkan `cpu7` (A53).
+  - **Temuan 3 — PowerHAL & GPU Panfrost terlalu agresif:** `AUDIO_STREAMING_LOW_LATENCY` menahan `PMQoSCpuDmaLatency=44 us` (memblokir `cpu-c2` `100 us`), `EXPENSIVE_RENDERING`/`INTERACTION` mengunci `GPUMinFreq=350 MHz` (`samsung,gpu-mif-floors` menaikkan DRAM ke `543+ MHz`), dan `panfrost_devfreq` (`upthreshold=45`) sering melonjak ke `544–600 MHz` (`1026–1552 MHz` DRAM floor). Ditambah trip `exynos-therm` baru agresif di `76–82°C`.
+  - **Uji A/B Langsung Sebelum Rebuild:** Mengunci `top-app`/`foreground` ke `0,5-7` (A53-only) + GPU `266 MHz` + A57 `800 MHz` menurunkan konsumsi playback menjadi rata-rata **`~856 mA`** (`-665 s/d -958 mA`, ~30% lebih hemat) dan menahan `exynos-therm` di **`77°C` stabil** dengan frame pacing tetap (`90th=13ms, 95th=14ms`, `0.73%` legacy jank dalam 120s).
+  - **Temuan Tambahan (Belum di-repack ke `0648`):** `system.prop` masih memiliki `ro.surface_flinger.uclamp.min=600` (`600 > 577` A53 cap, perlu diturunkan mis. `200` bila perlu) dan `GameSpace` (`GameStateDispatcher.java`) sudah mendukung *Bypass Charging* memakai `IChargingControl` (`charging_enabled`), hanya butuh `persist.sys.battery_bypass_supported=true` agar toggle **Pengisian Bypass** tampil di UI GameSpace.
+- **Perbaikan yang Masuk ke Kernel `0019` & Build `261128-0648`:**
+  - Kernel patch `0019-zeroflte-enable-dmc-interconnect-and-cool-thermals.patch`: tambah `CONFIG_INTERCONNECT=y` (aktifkan `EXYNOS7420_DMC=y`), ubah `panfrost_devfreq` `upthreshold=70` / `downdifferential=10`, dan geser trip `exynos-therm` ke **`58 / 63 / 68 / 74 / 82 / 90°C`** dengan batas GPU/A57 lebih ketat.
+  - ROM configs: `init.power.rc` (`foreground/cpus 0,5-7`), `powerhint.json` (`PMQoSCpuDmaLatency=100` pada audio, `GPUMinFreq=0`, `AdpfConfig` `UclampMin` diturunkan), dan `thermal_info_config.json` diselaraskan (`58/63/68/74/82/105°C`).
+- **Protokol No-Charging Testing:**
+  - `echo 0 > /sys/class/power_supply/battery/charging_enabled` (**bypass charging**, `Not charging`, `curr=0 mA` lewat USB) & `echo 1 > /sys/class/power_supply/battery/batt_slate_mode` (*force-discharge* untuk ukur arus `-mA` asli sambil tetap kabel USB ADB tanpa charging heat).
+- **Artifact Build `261128-0648` (`NO GitHub Release`, Sedang Diunduh untuk Flash & Verifikasi):**
+  - `RisingOS-9-261128-0648-CORE-COMMUNITY-zeroflte-ota.zip` (`1,599,996,772` B, SHA-256: `fb8dad9ef226b3b59c3b2cbd0efb640578147845fb359f3ec9b1c0faf1bc9571`).
+- **Uji Pra-Final pada Kernel `0019` + Fixed `powerhint.json` (`"10"`, `2026-11-28 14:18 WIB`):**
+  - `CONFIG_EXYNOS7420_DMC=y` + `CONFIG_INTERCONNECT=y` terverifikasi aktif di kernel `#10` (`/sys/class/devfreq/10800000.memory-controller` bound, `vdd_mif` turun dinamis ke **`587.5–731.25 mV`**).
+  - **`deep` sleep terverifikasi aman bersama DMC:** `exynos7-pm: wakeup status 0x80000001` (`IRQ 76 s2mps15`), `suspend_stats/success=1`, Wi-Fi resume & ping `192.168.1.1` = **`1.85–2.00 ms`** (`WLAN_OK`).
+  - **Uji NewTube Lofi 60 detik (`MobilePlaybackActivity` tampak aktif, `batt_slate_mode=1` tanpa charging):** `gpu = 266 MHz` flat, `a57 = 800 MHz` flat, `dmc = 543–1026 MHz @ 712.5–731.25 mV`, **`exynos-therm = 75 -> 72°C`**, **`battery = 32.5°C`**, `1,921` frames rendered (`Janky legacy: 3 / 0.16%`, `90th=13ms`, `90th gpu=8ms`).
+  - **Fix `powerhint.json` & `system.prop` di Final Rebuild (`task-5416`):** Mengganti `TAUClampBoost` `"12"` -> `"10"` (valid enum), menurunkan `ro.surface_flinger.uclamp.min` `600 -> 200`, serta menambah `persist.sys.battery_bypass_supported=true` untuk fitur *Bypass Charging* GameSpace.
+
+### Investigasi Stabilitas `DMC` / `sleep_watchdog` & Verifikasi Final `261128-1001` (`2026-11-28 17:45 WIB`)
+- **Ruled-Out `CONFIG_EXYNOS7420_DMC` (`0019`/`0020` eksperimental):** Mengaktifkan dynamic MIF scaling menurunkan `vdd_mif` ke `587.5–731.25 mV`, namun memicu reset tidak menentu saat siklus `deep` sleep (`RPON` / `SW_RST` teramati di `task-5473`, `task-5515`, `task-5577`, `task-5598`), sehingga `CONFIG_EXYNOS7420_DMC` & `CONFIG_INTERCONNECT` dilepas (`# CONFIG_INTERCONNECT is not set`).
+- **Fix Permanen Anti-Hang (`0006` -> `sleep_watchdog=true`):** Saat uji `stress20.sh` (dengan `console_suspend=0`), `cpu_suspend` sempat hang permanen dengan LED biru menyala karena `0006` menonaktifkan `sleep_watchdog = false`. Mengembalikan `sleep_watchdog = true` di `exynos7-pm.c` (sambil menjaga `WTCON=0` di `s3c2410wdt_suspend`) membiarkan tidur nyata berhenti aman bersama domain `TOP` dan otomatis me-reset dalam ~32 detik bila firmware pernah hang.
+- **Fix Seek/Flush Race `v4l2_codec2` (`0001-drop-abandoned-work-on-flush-race.patch`):** Menutup error `C2_CORRUPTED (0xe)` (`Work with bitstreamId=... not found, already abandoned?`) di `DecodeComponent` saat scrubbing cepat di ExoPlayer/`NewTube`.
+- **Verifikasi Final Pada Device (`06157df6085a9c3c`, `RisingOS-9-261128-1001-CORE-COMMUNITY-zeroflte-ota.zip`):**
+  - **Kernel & Konfigurasi:** `Linux 6.6.144-4k #2 SMP PREEMPT Sat Nov 28 09:56:37 UTC 2026`, `mem_sleep=s2idle [deep]`, `swdt=Y`, `# CONFIG_INTERCONNECT is not set`, trip `exynos-therm` `58/62/66/72/80/90/105/115°C`, `sf_uclamp=200`, `foreground=0,5-7`, `persist.sys.battery_bypass_supported=true`, `vendor.lineage.health.IChargingControl/default` aktif.
+  - **Do Not Break List:** `Number of camera devices: 2`, `0 [zerowm1840]`, `/dev/vfsspi` (`VIPER`, `type_check=1`), `c2.v4l2.{avc,hevc,vp8,vp9}.decoder` aktif.
+  - **Bypass Charging & Deep Sleep:** `charging_enabled=0 -> Not charging (-56 mA) -> 1 (Charging)`; `ok1=2` active + `ok2=2` screen-off `deep` (`DISP=0`) + `WAKE_PING=OK` (`2.01–4.48 ms`, `0% loss`).
+  - **Livestream NewTube Lofi Girl 15 Menit (`MobilePlaybackActivity`, `charging_enabled=0` mode tanpa charging):**
+    - **`exynos-therm` (SoC):** **`71.0 -> 70.0 -> 65.0 -> 64.0 -> 64.0 -> 65.0°C`** *(turun `-6°C` selama playback; **`-19°C`** dibanding baseline `84°C` & **`-13°C`** dibanding `261128-0516` `78°C`)*.
+    - **`battery/temp`:** **`31.5°C -> 31.5°C`** flat selama 15 menit penuh (`+0.0°C`, kapasitas bertahan `98% -> 98%` via bypass USB `charging_enabled=0`).
+    - **Clocks & Smoothness:** `a57 = 800 MHz`, `a53 = 1296–1400 MHz`, `gpu = 266 MHz`, `mfc_irq = 131 -> 21,781` (`+21,650`), `22,174` frames rendered (`50th=10ms, 90th=16ms, GPU 50th=5ms, 90th=7ms`), **`0` error `v4l2_codec2`/`ExoPlayer`**, **`0` error `dmesg`**, plus uji rapid seek `3x` mencatat **`0` error**.
+- **Artifact Build Final (`NO GitHub Release`):** `RisingOS-9-261128-1001-CORE-COMMUNITY-zeroflte-ota.zip` (`1,599,957,504` B, SHA-256: `d10e66e3147b6456575dfea27c263a967f6548e8a993556fdeec9a42b33d7eaa`), `/system` `2979.3 MiB / 2979.3 MiB max`.

@@ -1,0 +1,28 @@
+diff --git a/components/DecodeComponent.cpp b/components/DecodeComponent.cpp
+index 00880d7..c015b1d 100644
+--- a/components/DecodeComponent.cpp
++++ b/components/DecodeComponent.cpp
+@@ -479,7 +479,11 @@ void DecodeComponent::onDecodeDone(int32_t bitstreamId, VideoDecoder::DecodeStat
+     ALOG_ASSERT(mDecoderTaskRunner->RunsTasksInCurrentSequence());
+ 
+     auto it = mWorksAtDecoder.find(bitstreamId);
+-    ALOG_ASSERT(it != mWorksAtDecoder.end());
++    if (it == mWorksAtDecoder.end()) {
++        ALOGW("Work with bitstreamId=%d not found in onDecodeDone, already abandoned; ignoring.",
++              bitstreamId);
++        return;
++    }
+     C2Work* work = it->second.get();
+ 
+     switch (status) {
+@@ -517,8 +521,8 @@ void DecodeComponent::onOutputFrameReady(std::unique_ptr<VideoFrame> frame) {
+     const int32_t bitstreamId = frame->getBitstreamId();
+     auto it = mWorksAtDecoder.find(bitstreamId);
+     if (it == mWorksAtDecoder.end()) {
+-        ALOGE("Work with bitstreamId=%d not found, already abandoned?", bitstreamId);
+-        reportError(C2_CORRUPTED);
++        ALOGW("Work with bitstreamId=%d not found, already abandoned; dropping frame.",
++              bitstreamId);
+         return;
+     }
+     C2Work* work = it->second.get();

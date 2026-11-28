@@ -42,6 +42,7 @@ apply_patch "bionic"                                  "$PATCH_ROOT/bionic/0001-a
 apply_patch "build/make"                              "$PATCH_ROOT/build/make/0001-build-make-zeroflte-cache-size-and-releasetools.patch"
 apply_patch "build/soong"                             "$PATCH_ROOT/build/soong/0001-fsgen-install-lib-and-lib64-copies-at-their-literal-path.patch"
 apply_patch "external/minigbm"                        "$PATCH_ROOT/external/minigbm/0001-cros-gralloc-panfrost-simpledrm-card-nodes-aidl.patch"
+apply_patch "external/v4l2_codec2"                    "$PATCH_ROOT/external/v4l2_codec2/0001-drop-abandoned-work-on-flush-race.patch"
 apply_patch "frameworks/base"                         "$PATCH_ROOT/frameworks/base/0001-fontmanager-systemfonts-null-safe-and-watchdog-timeout.patch"
 apply_patch "frameworks/native"                       "$PATCH_ROOT/frameworks/native/0001-gralloc2-gralloc5-renderengine-egl-loader.patch"
 apply_patch "system/core"                             "$PATCH_ROOT/system/core/0001-init-selinux-permissive-for-universal7420.patch"

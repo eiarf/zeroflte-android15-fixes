@@ -1,0 +1,138 @@
+--- a/drivers/gpu/drm/panfrost/panfrost_devfreq.c
++++ b/drivers/gpu/drm/panfrost/panfrost_devfreq.c
+@@ -187,8 +187,8 @@
+ 	 * Setup default thresholds for the simple_ondemand governor.
+ 	 * The values are chosen based on experiments.
+ 	 */
+-	pfdevfreq->gov_data.upthreshold = 45;
+-	pfdevfreq->gov_data.downdifferential = 5;
++	pfdevfreq->gov_data.upthreshold = 70;
++	pfdevfreq->gov_data.downdifferential = 10;
+ 
+ 	devfreq = devm_devfreq_add_device(dev, &panfrost_devfreq_profile,
+ 					  DEVFREQ_GOV_SIMPLE_ONDEMAND,
+--- a/arch/arm64/boot/dts/exynos/exynos7-trip-points.dtsi
++++ b/arch/arm64/boot/dts/exynos/exynos7-trip-points.dtsi
+@@ -8,32 +8,32 @@
+ 
+ trips {
+ 	cpu_alert0: cpu-alert-0 {
+-		temperature = <64000>; /* millicelsius */
++		temperature = <58000>; /* millicelsius */
+ 		hysteresis = <4000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert1: cpu-alert-1 {
+-		temperature = <70000>; /* millicelsius */
++		temperature = <62000>; /* millicelsius */
+ 		hysteresis = <4000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert2: cpu-alert-2 {
+-		temperature = <76000>; /* millicelsius */
++		temperature = <66000>; /* millicelsius */
+ 		hysteresis = <4000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert3: cpu-alert-3 {
+-		temperature = <82000>; /* millicelsius */
++		temperature = <72000>; /* millicelsius */
+ 		hysteresis = <5000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert4: cpu-alert-4 {
+-		temperature = <88000>; /* millicelsius */
++		temperature = <80000>; /* millicelsius */
+ 		hysteresis = <5000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+ 	cpu_alert5: cpu-alert-5 {
+-		temperature = <95000>; /* millicelsius */
++		temperature = <90000>; /* millicelsius */
+ 		hysteresis = <5000>; /* millicelsius */
+ 		type = "passive";
+ 	};
+--- a/arch/arm64/boot/dts/exynos/exynos7.dtsi
++++ b/arch/arm64/boot/dts/exynos/exynos7.dtsi
+@@ -1569,41 +1569,42 @@
+ 
+ 			cooling-maps {
+ 				map0 {
+-					/* 64 C: A57 1400 MHz */
++					/* 58 C: A57 1200 MHz, GPU 420 MHz */
+ 					trip = <&cpu_alert0>;
+-					cooling-device = <&cpu_atlas0 4 4>,
+-						 <&cpu_atlas1 4 4>,
+-						 <&cpu_atlas2 4 4>,
+-						 <&cpu_atlas3 4 4>;
+-				};
+-				map1 {
+-					/* 70 C: A57 1200 MHz, A53 1400 MHz, GPU 600 MHz */
+-					trip = <&cpu_alert1>;
+ 					cooling-device = <&cpu_atlas0 6 6>,
+ 						 <&cpu_atlas1 6 6>,
+ 						 <&cpu_atlas2 6 6>,
+ 						 <&cpu_atlas3 6 6>,
++						 <&gpu 3 3>;
++				};
++				map1 {
++					/* 62 C: A57 800 MHz, A53 1400 MHz, GPU 350 MHz */
++					trip = <&cpu_alert1>;
++					cooling-device = <&cpu_atlas0 10 10>,
++						 <&cpu_atlas1 10 10>,
++						 <&cpu_atlas2 10 10>,
++						 <&cpu_atlas3 10 10>,
+ 						 <&cpu_apollo0 1 1>,
+ 						 <&cpu_apollo1 1 1>,
+ 						 <&cpu_apollo2 1 1>,
+ 						 <&cpu_apollo3 1 1>,
+-						 <&gpu 1 1>;
++						 <&gpu 4 4>;
+ 				};
+ 				map2 {
+-					/* 76 C: A57 1000 MHz, A53 1296 MHz, GPU 544 MHz */
++					/* 66 C: A57 800 MHz, A53 1296 MHz, GPU 266 MHz */
+ 					trip = <&cpu_alert2>;
+-					cooling-device = <&cpu_atlas0 8 8>,
+-						 <&cpu_atlas1 8 8>,
+-						 <&cpu_atlas2 8 8>,
+-						 <&cpu_atlas3 8 8>,
++					cooling-device = <&cpu_atlas0 10 10>,
++						 <&cpu_atlas1 10 10>,
++						 <&cpu_atlas2 10 10>,
++						 <&cpu_atlas3 10 10>,
+ 						 <&cpu_apollo0 2 2>,
+ 						 <&cpu_apollo1 2 2>,
+ 						 <&cpu_apollo2 2 2>,
+ 						 <&cpu_apollo3 2 2>,
+-						 <&gpu 2 2>;
++						 <&gpu 5 5>;
+ 				};
+ 				map3 {
+-					/* 82 C: A57 800 MHz, A53 1104 MHz, GPU 420 MHz */
++					/* 72 C: A57 800 MHz, A53 1104 MHz, GPU 266 MHz */
+ 					trip = <&cpu_alert3>;
+ 					cooling-device = <&cpu_atlas0 10 10>,
+ 						 <&cpu_atlas1 10 10>,
+@@ -1613,10 +1614,10 @@
+ 						 <&cpu_apollo1 4 4>,
+ 						 <&cpu_apollo2 4 4>,
+ 						 <&cpu_apollo3 4 4>,
+-						 <&gpu 3 3>;
++						 <&gpu 5 5>;
+ 				};
+ 				map4 {
+-					/* 88 C: A53 900 MHz, GPU 266 MHz */
++					/* 80 C: A53 900 MHz, GPU 266 MHz */
+ 					trip = <&cpu_alert4>;
+ 					cooling-device = <&cpu_apollo0 6 6>,
+ 						 <&cpu_apollo1 6 6>,
+@@ -1625,7 +1626,7 @@
+ 						 <&gpu 5 5>;
+ 				};
+ 				map5 {
+-					/* 95 C: A53 400 MHz */
++					/* 90 C: A53 400 MHz */
+ 					trip = <&cpu_alert5>;
+ 					cooling-device = <&cpu_apollo0 11 11>,
+ 						 <&cpu_apollo1 11 11>,
