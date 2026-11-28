@@ -24,8 +24,8 @@ echo 1 > /proc/sys/net/ipv4/tcp_ecn 2>/dev/null || true
 echo 100 > /proc/sys/vm/swappiness
 echo 0 > /proc/sys/vm/page-cluster
 echo 80 > /proc/sys/vm/vfs_cache_pressure
-if [ -f /proc/sys/vm/watermark_boost_factor ]; then
-    echo 0 > /proc/sys/vm/watermark_boost_factor
+if [ -f /sys/vm/watermark_boost_factor ] || [ -f /proc/sys/vm/watermark_boost_factor ]; then
+    echo 0 > /proc/sys/vm/watermark_boost_factor 2>/dev/null || true
 fi
 
 # 5. GPU Devfreq floor (266MHz idle to avoid heat) & Display bus floor (160MHz at same 650mV)
@@ -65,13 +65,17 @@ if [ -f /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq ]; then
     echo 1600000 > /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq
 fi
 
-# Keep Exynos7420 s2idle deep sleep active
+# Keep Exynos7420 deep sleep active
 echo deep > /sys/power/mem_sleep 2>/dev/null || true
 
-# 7. Deep-sleep & idle power: runtime PM auto for PCIe root/Wi-Fi, camera, and power domains
-#    (Keep 11400000.audio-subsystem / PL330 DMACs on for audio stability)
+# 7. Deep-sleep & idle power: runtime PM auto for camera & power domains;
+#    keep PCIe root/Wi-Fi (brcmfmac) and audio/PL330 on so system D3_INFORM works cleanly.
+for dev in /sys/bus/pci/devices/*; do
+    if [ -w "$dev/power/control" ]; then
+        echo on > "$dev/power/control" 2>/dev/null || true
+    fi
+done
 for dev in \
-    /sys/bus/pci/devices/* \
     /sys/bus/i2c/devices/12-000c \
     /sys/bus/platform/devices/14000000.csis \
     /sys/bus/platform/devices/14010000.csis \
@@ -85,25 +89,20 @@ for dev in \
     fi
 done
 
-# 8. Idle power & Doze tuning built into ROM (eliminates external Magisk workaround):
+# 8. Idle power & Doze tuning built into ROM (inline so init oneshot cgroup does not kill it):
 #    disable background BLE/Wi-Fi always-scan, skip Doze motion polling (spi1.0 IRQs),
-#    enable cached app freezer, and restrict alarm-waking partnersetup helper.
-(
-    w=0
-    while [ "$w" -lt 25 ]; do
-        if /system/bin/service check settings 2>/dev/null | grep -q "found"; then
-            break
-        fi
-        sleep 1
-        w=$((w + 1))
-    done
-    sleep 2
-    /system/bin/settings put global wifi_scan_always_enabled 0 2>/dev/null || true
-    /system/bin/settings put global ble_scan_always_enabled 0 2>/dev/null || true
-    /system/bin/settings put global device_idle_constants \
-        "light_after_inactive_to=60000,inactive_to=15000,sensing_to=0,locating_to=0,motion_inactive_to=0,idle_after_inactive_to=15000,idle_pending_to=30000,max_idle_pending_to=60000,quick_doze_delay_to=15000" \
-        2>/dev/null || true
-    /system/bin/device_config put activity_manager_native_boot use_freezer true 2>/dev/null || true
-    /system/bin/am set-standby-bucket com.google.android.partnersetup restricted 2>/dev/null || true
-) >/dev/null 2>&1 &
-
+#    and enable cached app freezer.
+w=0
+while [ "$w" -lt 15 ]; do
+    if /system/bin/service check settings 2>/dev/null | grep -q "found"; then
+        break
+    fi
+    sleep 1
+    w=$((w + 1))
+done
+/system/bin/settings put global wifi_scan_always_enabled 0 2>/dev/null || true
+/system/bin/settings put global ble_scan_always_enabled 0 2>/dev/null || true
+/system/bin/settings put global device_idle_constants \
+    "light_after_inactive_to=60000,inactive_to=15000,sensing_to=0,locating_to=0,motion_inactive_to=0,idle_after_inactive_to=15000,idle_pending_to=30000,max_idle_pending_to=60000,quick_doze_delay_to=15000" \
+    2>/dev/null || true
+/system/bin/device_config put activity_manager_native_boot use_freezer true 2>/dev/null || true

@@ -1,0 +1,69 @@
+diff --git a/drivers/net/wireless/broadcom/brcm80211/brcmfmac/pcie.c b/drivers/net/wireless/broadcom/brcm80211/brcmfmac/pcie.c
+index e84eeee9e..fd3bd610e 100644
+--- a/drivers/net/wireless/broadcom/brcm80211/brcmfmac/pcie.c
++++ b/drivers/net/wireless/broadcom/brcm80211/brcmfmac/pcie.c
+@@ -2676,6 +2676,8 @@ static int brcmf_pcie_pm_leave_D3(struct device *dev)
+ 		brcmf_dbg(PCIE, "Try to wakeup device....\n");
+ 		if (brcmf_pcie_send_mb_data(devinfo, BRCMF_H2D_HOST_D0_INFORM))
+ 			goto cleanup;
++		if (brcmf_pcie_send_mb_data(devinfo, BRCMF_H2D_HOST_D0_INFORM_IN_USE))
++			goto cleanup;
+ 		brcmf_dbg(PCIE, "Hot resume, continue....\n");
+ 		devinfo->state = BRCMFMAC_PCIE_STATE_UP;
+ 		brcmf_pcie_select_core(devinfo, BCMA_CORE_PCIE2);
+diff --git a/drivers/soc/samsung/exynos-pmu.c b/drivers/soc/samsung/exynos-pmu.c
+index 3d92c895c..08433b49e 100644
+--- a/drivers/soc/samsung/exynos-pmu.c
++++ b/drivers/soc/samsung/exynos-pmu.c
+@@ -297,6 +297,11 @@ static void exynos7_pmu_sys_init(void)
+ 			   EXYNOS7_DBG_INITIATE_WAKEUP);
+ }
+ 
++void exynos7_pmu_resume_init(void)
++{
++	exynos7_pmu_sys_init();
++}
++
+ static void exynos7_pmu_init(void)
+ {
+ 	exynos7_pmu_sys_init();
+diff --git a/drivers/soc/samsung/exynos-pmu.h b/drivers/soc/samsung/exynos-pmu.h
+index d3eab0153..a9345f6e2 100644
+--- a/drivers/soc/samsung/exynos-pmu.h
++++ b/drivers/soc/samsung/exynos-pmu.h
+@@ -44,7 +44,9 @@ extern u32 pmu_raw_readl(u32 offset);
+ 
+ #if defined(CONFIG_ARM64) && defined(CONFIG_SUSPEND)
+ void exynos7_pm_init(void);
++void exynos7_pmu_resume_init(void);
+ #else
+ static inline void exynos7_pm_init(void) {}
++static inline void exynos7_pmu_resume_init(void) {}
+ #endif
+ #endif /* __EXYNOS_PMU_H */
+diff --git a/drivers/soc/samsung/exynos7-pm-entry.S b/drivers/soc/samsung/exynos7-pm-entry.S
+index 6fd5bc14b..6ad52c744 100644
+--- a/drivers/soc/samsung/exynos7-pm-entry.S
++++ b/drivers/soc/samsung/exynos7-pm-entry.S
+@@ -22,7 +22,9 @@ SYM_CODE_START(exynos7_pm_resume_entry)
+ 	subs	x13, x13, #1
+ 	b.ne	1b
+ 	str	w11, [x9]
++	ic	iallu
+ 	dsb	sy
++	isb
+ 	b	cpu_resume
+ 	.ltorg
+ 2:	.ascii	"NKRESUMED-ENTRY\n"
+diff --git a/drivers/soc/samsung/exynos7-pm.c b/drivers/soc/samsung/exynos7-pm.c
+index 00b21bb28..12089cac4 100644
+--- a/drivers/soc/samsung/exynos7-pm.c
++++ b/drivers/soc/samsung/exynos7-pm.c
+@@ -1016,6 +1016,7 @@ static int exynos7_pm_enter(suspend_state_t state)
+ 		pr_info("exynos7-pm: early wake, the SoC stayed up\n");
+ 	}
+ 	exynos7_pm_restore_sfrs(exynos7_sleep_clk, ARRAY_SIZE(exynos7_sleep_clk));
++	exynos7_pmu_resume_init();
+ 	writel(0, exynos7_sysram_ns + EXYNOS7_INFORM1);
+ 	pr_info("exynos7-pm: wakeup status %#x\n",
+ 		pmu_raw_readl(EXYNOS7_WAKEUP_STAT));

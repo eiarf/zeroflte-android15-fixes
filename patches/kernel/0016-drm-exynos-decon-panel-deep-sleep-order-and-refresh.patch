@@ -1,0 +1,248 @@
+diff --git a/drivers/gpu/drm/exynos/exynos7_drm_decon.c b/drivers/gpu/drm/exynos/exynos7_drm_decon.c
+index 1cc156848..57329772e 100644
+--- a/drivers/gpu/drm/exynos/exynos7_drm_decon.c
++++ b/drivers/gpu/drm/exynos/exynos7_drm_decon.c
+@@ -31,6 +31,7 @@
+ #include <drm/drm_blend.h>
+ #include <drm/drm_fourcc.h>
+ #include <drm/drm_framebuffer.h>
++#include <drm/drm_panel.h>
+ #include <drm/drm_vblank.h>
+ #include <drm/exynos_drm.h>
+ 
+@@ -219,6 +220,7 @@ struct decon_context {
+ 	unsigned long			irq_flags;
+ 	bool				i80_if;
+ 	bool				bootloader_display;
++	struct device_link		*panel_link;
+ 	u32				sleep_trigcon;
+ 	bool				sleep_stopped;
+ 	u32				sleep_regs[ARRAY_SIZE(decon_sleep_regs)];
+@@ -1469,11 +1471,13 @@ static void decon_iommu_takeover(struct decon_context *ctx)
+ }
+ 
+ static void exynos7_decon_save(struct decon_context *ctx);
+-static void exynos7_decon_restore(struct decon_context *ctx);
++static bool exynos7_decon_restore(struct decon_context *ctx);
++static void exynos7_decon_wake_frame(struct decon_context *ctx);
+ 
+ static void decon_atomic_enable(struct exynos_drm_crtc *crtc)
+ {
+ 	struct decon_context *ctx = crtc->ctx;
++	bool wake_blank = false;
+ 	int ret;
+ 
+ 	ret = pm_runtime_resume_and_get(ctx->dev);
+@@ -1484,7 +1488,7 @@ static void decon_atomic_enable(struct exynos_drm_crtc *crtc)
+ 
+ 	/* the display was off through deep sleep: put S-Boot's setup back */
+ 	if (ctx->bootloader_display && ctx->i80_if)
+-		exynos7_decon_restore(ctx);
++		wake_blank = exynos7_decon_restore(ctx);
+ 
+ 	/*
+ 	 * Once only: later resumes enable translation from the SysMMU's own
+@@ -1500,6 +1504,9 @@ static void decon_atomic_enable(struct exynos_drm_crtc *crtc)
+ 		decon_enable_vblank(ctx->crtc);
+ 
+ 	decon_commit(ctx->crtc);
++	/* Clear panel GRAM lost in deep sleep before backlight turns DISPLAY_ON. */
++	if (wake_blank)
++		exynos7_decon_wake_frame(ctx);
+ 	decon_te_start(ctx);
+ }
+ 
+@@ -1787,6 +1794,7 @@ static int decon_probe(struct platform_device *pdev)
+ 	struct decon_context *ctx;
+ 	struct device_node *i80_if_timings;
+ 	struct icc_path *icc_path;
++	struct drm_panel *boot_panel = NULL;
+ 	int ret;
+ 
+ 	if (!dev->of_node)
+@@ -1812,6 +1820,21 @@ static int decon_probe(struct platform_device *pdev)
+ 	of_node_put(i80_if_timings);
+ 	ctx->bootloader_display = of_property_read_bool(dev->of_node,
+ 						"samsung,bootloader-display");
++	if (ctx->bootloader_display && ctx->i80_if) {
++		struct device_node *panel_np;
++
++		panel_np = of_find_compatible_node(NULL, NULL, "samsung,s6e3ha2");
++		if (panel_np) {
++			if (of_device_is_available(panel_np)) {
++				boot_panel = of_drm_find_panel(panel_np);
++				if (IS_ERR(boot_panel)) {
++					of_node_put(panel_np);
++					return PTR_ERR(boot_panel);
++				}
++			}
++			of_node_put(panel_np);
++		}
++	}
+ 	ctx->sysreg = syscon_regmap_lookup_by_phandle_optional(dev->of_node,
+ 						"samsung,disp-sysreg");
+ 	if (IS_ERR(ctx->sysreg))
+@@ -1907,6 +1930,13 @@ static int decon_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		goto err_disable_pm_runtime;
+ 
++	if (boot_panel && boot_panel->dev) {
++		ctx->panel_link = device_link_add(dev, boot_panel->dev,
++						  DL_FLAG_STATELESS);
++		if (!ctx->panel_link)
++			dev_warn(dev, "failed to link panel PM order\n");
++	}
++
+ 	return ret;
+ 
+ err_disable_pm_runtime:
+@@ -1926,6 +1956,8 @@ static int decon_remove(struct platform_device *pdev)
+ 
+ 	iounmap(ctx->regs);
+ 
++	if (ctx->panel_link)
++		device_link_del(ctx->panel_link);
+ 	component_del(&pdev->dev, &decon_component_ops);
+ 
+ 	return 0;
+@@ -2052,17 +2084,30 @@ static void exynos7_decon_save(struct decon_context *ctx)
+  * rest of the saved state, and latch it. Runs when the output restarts
+  * after sleep and when the CRTC turns on again.
+  */
+-static void exynos7_decon_restore(struct decon_context *ctx)
++static void exynos7_decon_wake_frame(struct decon_context *ctx)
++{
++	u32 val;
++	int ret;
++
++	decon_i80_trigger(ctx);
++	ret = readl_poll_timeout(ctx->regs + VIDCON1(0), val,
++				 !VIDCON1_LINECNT_GET(val) &&
++				 !(val & DECON_VSTATUS_MASK), 100, 50000);
++	if (ret)
++		dev_warn(ctx->dev, "wake frame did not finish: VIDCON1 %#x\n", val);
++}
++
++static bool exynos7_decon_restore(struct decon_context *ctx)
+ {
+ 	unsigned int i;
+ 
+ 	if (!ctx->sleep_saved)
+-		return;
++		return false;
+ 	for (i = 0; i < ARRAY_SIZE(decon_sleep_regs); i++)
+ 		if (decon_sleep_regs[i] == VIDOUTCON0)
+ 			break;
+ 	if (readl(ctx->regs + VIDOUTCON0) == ctx->sleep_regs[i])
+-		return;
++		return false;
+ 
+ 	if (ctx->sysreg)
+ 		regmap_update_bits(ctx->sysreg, DISP_CFG,
+@@ -2073,18 +2118,24 @@ static void exynos7_decon_restore(struct decon_context *ctx)
+ 	writel(DECON_UPDATE_STANDALONE_F, ctx->regs + DECON_UPDATE);
+ 	ctx->clk_gate = -1;	/* VCLKCON0 as saved; set it again */
+ 	dev_info(ctx->dev, "state restored after sleep\n");
++	return true;
+ }
+ 
+ static void exynos7_decon_start_output(struct decon_context *ctx)
+ {
++	bool restored;
++
+ 	if (!ctx->sleep_stopped)
+ 		return;
+ 
+-	exynos7_decon_restore(ctx);
++	restored = exynos7_decon_restore(ctx);
+ 	writel(readl(ctx->regs + VIDCON0) | VIDCON0_ENVID | VIDCON0_ENVID_F,
+ 	       ctx->regs + VIDCON0);
+-	writel(ctx->sleep_trigcon, ctx->regs + TRIGCON);
++	writel(ctx->sleep_trigcon & ~TRIGCON_SWTRIGCMD_I80_RGB,
++	       ctx->regs + TRIGCON);
+ 	ctx->sleep_stopped = false;
++	if (restored)
++		exynos7_decon_wake_frame(ctx);
+ 	dev_dbg(ctx->dev, "output restarted after sleep\n");
+ }
+ 
+diff --git a/drivers/gpu/drm/panel/panel-samsung-s6e3ha2.c b/drivers/gpu/drm/panel/panel-samsung-s6e3ha2.c
+index 45f1b0c4d..b541d86b8 100644
+--- a/drivers/gpu/drm/panel/panel-samsung-s6e3ha2.c
++++ b/drivers/gpu/drm/panel/panel-samsung-s6e3ha2.c
+@@ -738,6 +738,7 @@ struct s6e3ha2 {
+ 	bool dark;		/* last level was 0: the display is off */
+ 	bool display_off;	/* re-initialised dark: on at the next level */
+ 	bool sleep_reinit;	/* put to sleep for deep sleep */
++	bool sleep_display_on;	/* send display on in complete() after DECON refreshes GRAM */
+ 
+ 	const struct s6e3ha2_panel_desc *desc;
+ 
+@@ -1490,7 +1491,6 @@ static int s6e3ha2_sys_suspend(struct device *dev)
+ 
+ static int s6e3ha2_sleep_reinit(struct s6e3ha2 *ctx)
+ {
+-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+ 	int ret;
+ 
+ 	/* the level sent by the setup must not light it early */
+@@ -1499,12 +1499,12 @@ static int s6e3ha2_sleep_reinit(struct s6e3ha2 *ctx)
+ 	msleep(120);
+ 	s6e3ha2_call_write_func(ret, s6e3ha2_setup(ctx));
+ 
+-	if (ctx->dark) {
+-		ctx->display_off = true;
+-		return 0;
+-	}
+-	s6e3ha2_call_write_func(ret, mipi_dsi_dcs_set_display_on(dsi));
+-	ctx->display_off = false;
++	/*
++	 * Deep sleep loses internal GRAM: defer DISPLAY_ON to complete() (or
++	 * next non-zero brightness if dark), after DECON refreshes panel GRAM.
++	 */
++	ctx->display_off = true;
++	ctx->sleep_display_on = !ctx->dark;
+ 
+ 	return 0;
+ }
+@@ -1526,13 +1526,37 @@ static int s6e3ha2_sys_resume(struct device *dev)
+ 		dev_err(dev, "not re-initialised after sleep: %d\n", ret);
+ 	else
+ 		dev_info(dev, "re-initialised after sleep, display %s\n",
+-			 ctx->display_off ? "on at the next level" : "on");
++			 ctx->sleep_display_on ? "on after frame" : "on at the next level");
+ 
+ 	return 0;
+ }
+ 
+-static DEFINE_SIMPLE_DEV_PM_OPS(s6e3ha2_pm_ops, s6e3ha2_sys_suspend,
+-				s6e3ha2_sys_resume);
++static void s6e3ha2_sys_complete(struct device *dev)
++{
++	struct s6e3ha2 *ctx = dev_get_drvdata(dev);
++	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
++	int ret = 0;
++
++	if (!ctx->sleep_display_on)
++		return;
++	ctx->sleep_display_on = false;
++
++	mutex_lock(&ctx->bl_dev->update_lock);
++	if (ctx->display_off && !ctx->dark) {
++		ret = mipi_dsi_dcs_set_display_on(dsi);
++		if (!ret)
++			ctx->display_off = false;
++	}
++	mutex_unlock(&ctx->bl_dev->update_lock);
++
++	if (ret)
++		dev_err(dev, "display on after sleep failed: %d\n", ret);
++}
++
++static const struct dev_pm_ops s6e3ha2_pm_ops = {
++	SET_SYSTEM_SLEEP_PM_OPS(s6e3ha2_sys_suspend, s6e3ha2_sys_resume)
++	.complete = pm_sleep_ptr(s6e3ha2_sys_complete),
++};
+ 
+ static const struct drm_display_mode s6e3ha2_mode = {
+ 	.clock = 222372,

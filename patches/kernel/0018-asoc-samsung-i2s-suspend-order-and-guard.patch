@@ -1,0 +1,65 @@
+diff --git a/sound/soc/samsung/i2s.c b/sound/soc/samsung/i2s.c
+index 3af48c9b5..e9fce34e0 100644
+--- a/sound/soc/samsung/i2s.c
++++ b/sound/soc/samsung/i2s.c
+@@ -974,12 +974,14 @@ static int i2s_trigger(struct snd_pcm_substream *substream,
+ 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+ 		spin_lock_irqsave(&priv->lock, flags);
+ 
+-		if (capture) {
+-			i2s_rxctrl(i2s, 0);
+-			i2s_fifo(i2s, FIC_RXFLUSH);
+-		} else {
+-			i2s_txctrl(i2s, 0);
+-			i2s_fifo(i2s, FIC_TXFLUSH);
++		if (pm_runtime_active(dai->dev)) {
++			if (capture) {
++				i2s_rxctrl(i2s, 0);
++				i2s_fifo(i2s, FIC_RXFLUSH);
++			} else {
++				i2s_txctrl(i2s, 0);
++				i2s_fifo(i2s, FIC_TXFLUSH);
++			}
+ 		}
+ 
+ 		spin_unlock_irqrestore(&priv->lock, flags);
+diff --git a/sound/soc/samsung/zero_wm1840.c b/sound/soc/samsung/zero_wm1840.c
+index 674dc1ce9..e1d0323ef 100644
+--- a/sound/soc/samsung/zero_wm1840.c
++++ b/sound/soc/samsung/zero_wm1840.c
+@@ -29,6 +29,7 @@
+ #include <linux/mfd/madera/registers.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
++#include <linux/of_platform.h>
+ #include <linux/platform_device.h>
+ #include <sound/jack.h>
+ #include <sound/pcm.h>
+@@ -537,6 +538,7 @@ static int zero_audio_probe(struct platform_device *pdev)
+ 	struct device *dev = &pdev->dev;
+ 	struct snd_soc_card *card = &zero_card;
+ 	struct device_node *i2s_node, *amp_node;
++	struct platform_device *i2s_pdev;
+ 	struct zero_priv *priv;
+ 	int ret;
+ 
+@@ -585,7 +587,18 @@ static int zero_audio_probe(struct platform_device *pdev)
+ 		card->num_links = ZERO_LINK_AMP;
+ 	}
+ 
+-	return devm_snd_soc_register_card(dev, card);
++	ret = devm_snd_soc_register_card(dev, card);
++	if (ret)
++		return ret;
++
++	i2s_pdev = of_find_device_by_node(i2s_node);
++	if (i2s_pdev) {
++		device_link_add(dev, &i2s_pdev->dev,
++				DL_FLAG_STATELESS | DL_FLAG_AUTOREMOVE_CONSUMER);
++		put_device(&i2s_pdev->dev);
++	}
++
++	return 0;
+ }
+ 
+ static const struct of_device_id zero_audio_of_match[] = {
