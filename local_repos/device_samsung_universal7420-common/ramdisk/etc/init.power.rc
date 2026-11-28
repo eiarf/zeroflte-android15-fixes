@@ -83,3 +83,18 @@ service vendor.postboot /vendor/bin/init.postboot.sh
 on property:sys.boot_completed=1
     setprop vendor.powerhal.init 1
     start vendor.postboot
+# Two-stage sleep: keep cores in CPU_C2 idle capped at 800 MHz (CPU) / 266 MHz (GPU)
+# for 20 minutes after screen-off before entering full PSCI deep sleep, avoiding
+# rapid suspend/abort thrashing on UFS and brcmfmac during brief screen toggles.
+on property:vendor.touch.inhibit=1
+    write /sys/power/mem_sleep deep
+    write /sys/power/wake_lock "zeroflte_pre_deep 1200000000000"
+    write /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq 800000
+    write /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq 800000
+    write /sys/class/devfreq/14ac0000.gpu/max_freq 266000000
+
+on property:vendor.touch.inhibit=0
+    write /sys/power/wake_unlock zeroflte_pre_deep
+    write /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq 1500000
+    write /sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq 1600000
+    write /sys/class/devfreq/14ac0000.gpu/max_freq 700000000

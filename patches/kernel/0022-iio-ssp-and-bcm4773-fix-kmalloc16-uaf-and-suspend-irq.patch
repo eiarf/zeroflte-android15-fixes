@@ -1,0 +1,166 @@
+diff --git a/arch/arm64/configs/zeroflte_gki.fragment b/arch/arm64/configs/zeroflte_gki.fragment
+index 366ca0249..19e98fa7a 100644
+--- a/arch/arm64/configs/zeroflte_gki.fragment
++++ b/arch/arm64/configs/zeroflte_gki.fragment
+@@ -171,7 +171,7 @@ CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+ # unless userspace cancels it once the boot completes. The hardware
+ # watchdog runs from its probe (s3c2410_wdt.tmr_atboot). firmware_class.path
+ # lets drivers such as brcmfmac load firmware straight from /vendor/firmware.
+-CONFIG_CMDLINE="slub_debug=FZP,kmalloc-16 stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off bootconfig clk_ignore_unused pd_ignore_unused deferred_probe_timeout=0 fw_devlink=permissive rodata=on loglevel=4 printk.devkmsg=on log_buf_len=4M dsh_autorecovery=150 s3c2410_wdt.tmr_atboot=1 firmware_class.path=/vendor/firmware"
++CONFIG_CMDLINE="stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off bootconfig clk_ignore_unused pd_ignore_unused deferred_probe_timeout=0 fw_devlink=permissive rodata=on loglevel=4 printk.devkmsg=on log_buf_len=4M dsh_autorecovery=150 s3c2410_wdt.tmr_atboot=1 firmware_class.path=/vendor/firmware"
+ 
+ # Size: the Image must fit the 28 MiB BOOT partition with the ROM ramdisk.
+ # The A57/A53 have no pointer authentication, so the PAC-to-SCS patching
+diff --git a/drivers/iio/common/ssp_sensors/ssp_iio.c b/drivers/iio/common/ssp_sensors/ssp_iio.c
+index 88b8b56bf..2cf4be807 100644
+--- a/drivers/iio/common/ssp_sensors/ssp_iio.c
++++ b/drivers/iio/common/ssp_sensors/ssp_iio.c
+@@ -17,17 +17,27 @@
+  *
+  * Returns 0 or negative value in case of error
+  */
++#define SSP_IIO_MIN_SCAN_BUF	32
++
+ int ssp_common_buffer_postenable(struct iio_dev *indio_dev)
+ {
+ 	struct ssp_sensor_data *spd = iio_priv(indio_dev);
+ 	struct ssp_data *data = dev_get_drvdata(indio_dev->dev.parent->parent);
+ 
+-	/* the allocation is made in post because scan size is known in this
+-	 * moment
+-	 * */
+-	spd->buffer = kmalloc(indio_dev->scan_bytes, GFP_KERNEL | GFP_DMA);
+-	if (!spd->buffer)
+-		return -ENOMEM;
++	/*
++	 * Allocate a device-lifetime scan buffer once (matching ssp_hub_sensors)
++	 * instead of kmalloc/kfree per buffer enable/disable: bcm4773-rx work_rx
++	 * can race with postdisable and otherwise corrupt freed kmalloc-16 objects.
++	 */
++	if (!spd->buffer) {
++		size_t alloc_sz = max_t(size_t, indio_dev->scan_bytes,
++					SSP_IIO_MIN_SCAN_BUF);
++
++		spd->buffer = devm_kzalloc(indio_dev->dev.parent, alloc_sz,
++					   GFP_KERNEL);
++		if (!spd->buffer)
++			return -ENOMEM;
++	}
+ 
+ 	return ssp_enable_sensor(data, spd->type,
+ 				 ssp_get_sensor_delay(data, spd->type));
+@@ -43,17 +53,10 @@ EXPORT_SYMBOL_NS(ssp_common_buffer_postenable, IIO_SSP_SENSORS);
+  */
+ int ssp_common_buffer_postdisable(struct iio_dev *indio_dev)
+ {
+-	int ret;
+ 	struct ssp_sensor_data *spd = iio_priv(indio_dev);
+ 	struct ssp_data *data = dev_get_drvdata(indio_dev->dev.parent->parent);
+ 
+-	ret = ssp_disable_sensor(data, spd->type);
+-	if (ret < 0)
+-		return ret;
+-
+-	kfree(spd->buffer);
+-
+-	return ret;
++	return ssp_disable_sensor(data, spd->type);
+ }
+ EXPORT_SYMBOL_NS(ssp_common_buffer_postdisable, IIO_SSP_SENSORS);
+ 
+@@ -74,7 +77,8 @@ int ssp_common_process_data(struct iio_dev *indio_dev, void *buf,
+ 	int64_t calculated_time = 0;
+ 	struct ssp_sensor_data *spd = iio_priv(indio_dev);
+ 
+-	if (indio_dev->scan_bytes == 0)
++	if (!spd->buffer || !iio_buffer_enabled(indio_dev) ||
++	    indio_dev->scan_bytes == 0)
+ 		return 0;
+ 
+ 	/*
+diff --git a/drivers/misc/bcm4773/ssi.c b/drivers/misc/bcm4773/ssi.c
+index 92e9a5780..7159c6627 100644
+--- a/drivers/misc/bcm4773/ssi.c
++++ b/drivers/misc/bcm4773/ssi.c
+@@ -53,6 +53,7 @@ struct bbd_ssi {
+ 	unsigned int max_rw;		/* payload per frame, from the controller */
+ 	unsigned int max_read;
+ 	bool powered;
++	bool suspended;			/* parent SPI controller suspended */
+ 	bool quiet;			/* no wakeup events, see bbd_ssi_prepare() */
+ 
+ 	spinlock_t fifo_lock;
+@@ -200,7 +201,7 @@ static int ssi_run(struct bbd_ssi *ssi)
+ 	int loops, ret = 0;
+ 
+ 	mutex_lock(&ssi->xfer_lock);
+-	if (!ssi->powered)
++	if (!ssi->powered || READ_ONCE(ssi->suspended))
+ 		goto unlock;
+ 
+ 	req = gpiod_get_value_cansleep(ssi->host_req);
+@@ -245,7 +246,8 @@ static int ssi_run(struct bbd_ssi *ssi)
+ 		pm_relax(dev);
+ unlock:
+ 	mutex_unlock(&ssi->xfer_lock);
+-	if (!ret && READ_ONCE(ssi->powered) && ssi_tx_pending(ssi))
++	if (!ret && READ_ONCE(ssi->powered) && !READ_ONCE(ssi->suspended) &&
++	    ssi_tx_pending(ssi))
+ 		queue_work(ssi->tx_wq, &ssi->tx_work);
+ 	return ret;
+ }
+@@ -492,25 +494,48 @@ static void bbd_ssi_complete(struct device *dev)
+ 
+ static int bbd_ssi_suspend(struct device *dev)
+ {
++	struct spi_device *spi = to_spi_device(dev);
+ 	struct bbd_device *bbd = dev_get_drvdata(dev);
++	struct bbd_ssi *ssi = bbd->ssi;
+ 
+ 	/* The sensor hub child suspended first: send what it queued. */
+-	flush_work(&bbd->ssi->tx_work);
+-	WRITE_ONCE(bbd->ssi->quiet, false);
++	flush_work(&ssi->tx_work);
++
++	/*
++	 * Disable the threaded IRQ and block new SPI bursts before parent
++	 * 14d30000.spi suspends its queue (-ESHUTDOWN / -108). Exynos EINT
++	 * wake-masking via enable_irq_wake() still wakes the AP on HOST_REQ.
++	 */
++	disable_irq(spi->irq);
++	mutex_lock(&ssi->xfer_lock);
++	WRITE_ONCE(ssi->suspended, true);
++	mutex_unlock(&ssi->xfer_lock);
++	cancel_work_sync(&ssi->tx_work);
+ 
+-	/* The hub keeps sampling in suspend; HOST_REQ wakes the AP. */
++	WRITE_ONCE(ssi->quiet, false);
+ 	if (device_may_wakeup(dev))
+-		enable_irq_wake(to_spi_device(dev)->irq);
++		enable_irq_wake(spi->irq);
+ 	return 0;
+ }
+ 
+ static int bbd_ssi_resume(struct device *dev)
+ {
++	struct spi_device *spi = to_spi_device(dev);
+ 	struct bbd_device *bbd = dev_get_drvdata(dev);
++	struct bbd_ssi *ssi = bbd->ssi;
+ 
+ 	if (device_may_wakeup(dev))
+-		disable_irq_wake(to_spi_device(dev)->irq);
+-	queue_work(bbd->ssi->tx_wq, &bbd->ssi->tx_work);
++		disable_irq_wake(spi->irq);
++
++	mutex_lock(&ssi->xfer_lock);
++	WRITE_ONCE(ssi->suspended, false);
++	mutex_unlock(&ssi->xfer_lock);
++	enable_irq(spi->irq);
++
++	if (gpiod_get_value_cansleep(ssi->host_req))
++		pm_wakeup_dev_event(dev, 200, false);
++
++	queue_work(ssi->tx_wq, &ssi->tx_work);
+ 	return 0;
+ }
+ 

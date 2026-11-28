@@ -13,7 +13,7 @@ allow init_postboot_sh system_file:file rx_file_perms;
 # cmd window size/density over binder
 binder_use(init_postboot_sh)
 binder_call(init_postboot_sh, system_server)
-allow init_postboot_sh window_service:service_manager find;
+allow init_postboot_sh { window_service settings_service activity_service content_service }:service_manager find;
 
 # sysfs/proc post-boot fallbacks (watchdog disarm, zram, cpufreq, gpu, stmfts)
 allow init_postboot_sh proc:file r_file_perms;

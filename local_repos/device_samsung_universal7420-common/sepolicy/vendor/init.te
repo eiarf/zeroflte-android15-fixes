@@ -72,3 +72,5 @@ allow init { sysfs_stmfts sysfs_sec_touchkey }:file w_file_perms;
 # every first write logs a write denial on the directory although the
 # write itself succeeds. Do not grant directory write; only stop auditing it.
 dontaudit init { debugfs_wifi_tracing debugfs_bootreceiver_tracing }:dir write;
+# GPU max_freq throttling while screen is off (init.power.rc)
+allow init sysfs_devfreq:file w_file_perms;

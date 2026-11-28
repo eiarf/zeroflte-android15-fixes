@@ -4,7 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ROM_DIR="${1:-${ROM_DIR:-$HOME/rising17}}"
-KERNEL_SRC="${KERNEL_SRC:-$ROM_DIR/kernel_src/SM_G92X}"
+if [[ -z "${KERNEL_SRC:-}" ]]; then
+    if [[ -d "$ROM_DIR/kernel_src/SM_G92X/.git" ]]; then
+        KERNEL_SRC="$ROM_DIR/kernel_src/SM_G92X"
+    elif [[ -d "$(dirname "$ROM_DIR")/SM_G92X/.git" ]]; then
+        KERNEL_SRC="$(dirname "$ROM_DIR")/SM_G92X"
+    else
+        KERNEL_SRC="$ROM_DIR/kernel_src/SM_G92X"
+    fi
+fi
 KERNEL_OUT="${KERNEL_OUT:-$KERNEL_SRC/out}"
 JOBS="${JOBS:-$(nproc)}"
 KSU_OFFLINE="${KSU_OFFLINE:-0}"
@@ -48,30 +56,53 @@ if [[ ! -d "$KERNEL_SRC/.git" ]]; then
     git clone --depth=1 -b "$SM_G92X_BRANCH" "$SM_G92X_REPO" "$KERNEL_SRC"
 fi
 
-# 3. Inject SukiSU-Nova kernel/ (with offline-safe Kbuild & materialized include/uapi/)
+# 3. Verify patchset state; if any patch changed/removed or markers are out of sync,
+#    reset tracked kernel source cleanly (preserving out/ build cache) before applying.
 KSU_SRC_BUNDLE="$BUNDLE_DIR/local_repos/sukisu_nova_kernel"
 if [[ ! -f "$KSU_SRC_BUNDLE/Kbuild" || ! -f "$KSU_SRC_BUNDLE/include/uapi/ksu.h" ]]; then
     echo "error: sukisu_nova_kernel bundle incomplete at $KSU_SRC_BUNDLE" >&2
     exit 1
 fi
+
+PATCH_MARK_DIR="$KERNEL_SRC/.git/zeroflte_patches"
+mkdir -p "$PATCH_MARK_DIR"
+NEED_RESET=0
+EXPECTED_COUNT=0
+for KPATCH in "$BUNDLE_DIR/patches/kernel/"*.patch; do
+    [ -f "$KPATCH" ] || continue
+    EXPECTED_COUNT=$((EXPECTED_COUNT + 1))
+    PNAME="$(basename "$KPATCH")"
+    PSHA="$(sha256sum "$KPATCH" | awk "{print \$1}")"
+    if [[ ! -f "$PATCH_MARK_DIR/$PNAME" || "$(cat "$PATCH_MARK_DIR/$PNAME")" != "$PSHA" ]]; then
+        NEED_RESET=1
+    fi
+done
+MARK_COUNT="$(find "$PATCH_MARK_DIR" -maxdepth 1 -type f -name '*.patch' | wc -l)"
+if [[ "$MARK_COUNT" -ne "$EXPECTED_COUNT" ]]; then
+    NEED_RESET=1
+fi
+
+if [[ "$NEED_RESET" -eq 1 ]]; then
+    echo "=== Patchset updated (or fresh tree): resetting $KERNEL_SRC (preserving out/) ==="
+    git -C "$KERNEL_SRC" checkout -f HEAD
+    git -C "$KERNEL_SRC" clean -fd -e out
+    rm -rf "$PATCH_MARK_DIR"
+    mkdir -p "$PATCH_MARK_DIR"
+fi
+
 echo "=== Syncing SukiSU-Nova into drivers/kernelsu ==="
 rm -rf "$KERNEL_SRC/drivers/kernelsu"
 mkdir -p "$KERNEL_SRC/drivers/kernelsu"
 cp -a "$KSU_SRC_BUNDLE/." "$KERNEL_SRC/drivers/kernelsu/"
 rm -rf "$KERNEL_SRC/drivers/kernelsu/.git"
 
-# 4. Apply kernel patches (SukiSU-Nova config + exynos-drm defer fix, idempotent)
-PATCH_MARK_DIR="$KERNEL_SRC/.git/zeroflte_patches"
-mkdir -p "$PATCH_MARK_DIR"
+# 4. Apply kernel patches sequentially (0001..0024)
 for KPATCH in "$BUNDLE_DIR/patches/kernel/"*.patch; do
     [ -f "$KPATCH" ] || continue
     PNAME="$(basename "$KPATCH")"
     PSHA="$(sha256sum "$KPATCH" | awk "{print \$1}")"
     if [[ -f "$PATCH_MARK_DIR/$PNAME" && "$(cat "$PATCH_MARK_DIR/$PNAME")" == "$PSHA" ]]; then
         echo "[SKIP] Kernel patch marker matches: $PNAME"
-    elif git -C "$KERNEL_SRC" apply --reverse --check "$KPATCH" >/dev/null 2>&1; then
-        echo "$PSHA" > "$PATCH_MARK_DIR/$PNAME"
-        echo "[SKIP] Kernel patch already applied: $PNAME"
     else
         git -C "$KERNEL_SRC" apply --check "$KPATCH"
         git -C "$KERNEL_SRC" apply "$KPATCH"

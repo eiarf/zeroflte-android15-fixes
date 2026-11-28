@@ -3,6 +3,14 @@
   <!-- Explicit GitHub remote to avoid colliding with RisingOS default remote -->
   <remote name="gh_s6" fetch="https://github.com" />
 
+  <!-- Runtime Linux 6.6 LTS kernel source (built with SukiSU-Nova + patches/kernel/0001..0024
+       into device/samsung/universal7420-common/prebuilt via scripts/build_kernel_linux.sh) -->
+  <project path="kernel_src/SM_G92X"
+           name="eiarf/SM_G92X"
+           remote="gh_s6"
+           revision="lineage-22.2-android15-6.6"
+           clone-depth="1" />
+
   <!-- 3.10 kernel tree retained ONLY for device_kernel_headers (32-bit UAPI compat).
        Actual runtime kernel is Linux 6.6 LTS + SukiSU-Nova in prebuilt/Image. -->
   <project path="kernel/samsung/universal7420"

@@ -1,0 +1,72 @@
+diff --git a/drivers/watchdog/s3c2410_wdt.c b/drivers/watchdog/s3c2410_wdt.c
+index 08e9facf2..97b6b6f2d 100644
+--- a/drivers/watchdog/s3c2410_wdt.c
++++ b/drivers/watchdog/s3c2410_wdt.c
+@@ -171,6 +171,7 @@ struct s3c2410_wdt {
+ 	spinlock_t		lock;
+ 	unsigned long		wtcon_save;
+ 	unsigned long		wtdat_save;
++	bool			wtcon_saved;
+ 	struct watchdog_device	wdt_device;
+ 	struct notifier_block	freq_transition;
+ 	const struct s3c2410_wdt_variant *drv_data;
+@@ -762,6 +763,7 @@ static int s3c2410wdt_suspend(struct device *dev)
+ 	/* Save watchdog state, and turn it off. */
+ 	wdt->wtcon_save = readl(wdt->reg_base + S3C2410_WTCON);
+ 	wdt->wtdat_save = readl(wdt->reg_base + S3C2410_WTDAT);
++	wdt->wtcon_saved = true;
+ 
+ 	/* Note that WTCNT doesn't need to be saved. */
+ 	s3c2410wdt_stop(&wdt->wdt_device);
+@@ -771,10 +773,22 @@ static int s3c2410wdt_suspend(struct device *dev)
+ }
+ 
+ static int s3c2410wdt_resume(struct device *dev)
++{
++	/* Wait until .complete() so slower resumes (e.g. UFS) cannot trip WDT
++	 * while userspace watchdogd is still frozen and console is suspended.
++	 */
++	return 0;
++}
++
++static void s3c2410wdt_complete(struct device *dev)
+ {
+ 	int ret;
+ 	struct s3c2410_wdt *wdt = dev_get_drvdata(dev);
+ 
++	if (!wdt->wtcon_saved)
++		return;
++	wdt->wtcon_saved = false;
++
+ 	/*
+ 	 * Re-enable the reset request in the PMU before restoring the
+ 	 * registers. On Exynos7420 the timer reads back its reset defaults
+@@ -784,21 +798,21 @@ static int s3c2410wdt_resume(struct device *dev)
+ 	 */
+ 	ret = s3c2410wdt_enable(wdt, true);
+ 	if (ret < 0)
+-		return ret;
++		return;
+ 
+-	/* Restore watchdog state. */
++	/* Restore watchdog state with a fresh full WTCNT window. */
+ 	writel(wdt->wtdat_save, wdt->reg_base + S3C2410_WTDAT);
+-	writel(wdt->wtdat_save, wdt->reg_base + S3C2410_WTCNT);/* Reset count */
++	writel(wdt->wtdat_save, wdt->reg_base + S3C2410_WTCNT);
+ 	writel(wdt->wtcon_save, wdt->reg_base + S3C2410_WTCON);
+ 
+ 	dev_info(dev, "watchdog %sabled\n",
+ 		(wdt->wtcon_save & S3C2410_WTCON_ENABLE) ? "en" : "dis");
+-
+-	return 0;
+ }
+ 
+-static DEFINE_SIMPLE_DEV_PM_OPS(s3c2410wdt_pm_ops,
+-				s3c2410wdt_suspend, s3c2410wdt_resume);
++static const struct dev_pm_ops s3c2410wdt_pm_ops = {
++	SET_SYSTEM_SLEEP_PM_OPS(s3c2410wdt_suspend, s3c2410wdt_resume)
++	.complete = pm_sleep_ptr(s3c2410wdt_complete),
++};
+ 
+ static struct platform_driver s3c2410wdt_driver = {
+ 	.probe		= s3c2410wdt_probe,

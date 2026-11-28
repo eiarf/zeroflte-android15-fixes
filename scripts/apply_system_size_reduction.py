@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from server_control import run_remote_command
 
-script = """
+script = r'''
 set -euo pipefail
 ROM_DIR="/serverhive3/eiarf/rising17"
 
@@ -159,7 +159,7 @@ else:
 PYEOF
 
 echo "=== All size reduction patches applied successfully! ==="
-"""
+'''
 
 rc, out = run_remote_command(script)
 sys.exit(rc)

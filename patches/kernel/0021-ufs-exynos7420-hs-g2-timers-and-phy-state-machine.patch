@@ -1,0 +1,154 @@
+diff --git a/drivers/phy/samsung/phy-samsung-ufs.c b/drivers/phy/samsung/phy-samsung-ufs.c
+index 183c88e3d..9ad6da021 100644
+--- a/drivers/phy/samsung/phy-samsung-ufs.c
++++ b/drivers/phy/samsung/phy-samsung-ufs.c
+@@ -121,8 +121,11 @@ static int samsung_ufs_phy_calibrate(struct phy *phy)
+ 		ufs_phy->ufs_phy_state = CFG_POST_PWR_HS;
+ 		break;
+ 	case CFG_POST_PWR_HS:
+-		/* Change back to INIT state */
+-		ufs_phy->ufs_phy_state = CFG_PRE_INIT;
++		/*
++		 * Stay ready for runtime HS power-mode changes; full link
++		 * re-init explicitly resets ufs_phy_state via phy_init().
++		 */
++		ufs_phy->ufs_phy_state = CFG_PRE_PWR_HS;
+ 		break;
+ 	default:
+ 		dev_err(ufs_phy->dev, "wrong state for phy calibration\n");
+@@ -198,8 +201,11 @@ static int samsung_ufs_phy_set_mode(struct phy *generic_phy,
+ 
+ 	ss_phy->mode = PHY_MODE_INVALID;
+ 
+-	if (mode > 0)
++	if (mode > 0) {
+ 		ss_phy->mode = mode;
++		if (mode == PHY_MODE_UFS_HS_A || mode == PHY_MODE_UFS_HS_B)
++			ss_phy->ufs_phy_state = CFG_PRE_PWR_HS;
++	}
+ 
+ 	return 0;
+ }
+diff --git a/drivers/ufs/host/ufs-exynos.c b/drivers/ufs/host/ufs-exynos.c
+index f0987fc01..6a09e76ee 100644
+--- a/drivers/ufs/host/ufs-exynos.c
++++ b/drivers/ufs/host/ufs-exynos.c
+@@ -139,10 +139,19 @@ enum {
+ /*
+  * UNIPRO registers
+  */
++#define UNIPRO_DME_PWR_REQ_LOCALL2TIMER0	0x0098
++#define UNIPRO_DME_PWR_REQ_LOCALL2TIMER1	0x009C
++#define UNIPRO_DME_PWR_REQ_LOCALL2TIMER2	0x00A0
++#define UNIPRO_DME_PWR_REQ_REMOTEL2TIMER0	0x00A4
++#define UNIPRO_DME_PWR_REQ_REMOTEL2TIMER1	0x00A8
++#define UNIPRO_DME_PWR_REQ_REMOTEL2TIMER2	0x00AC
++
+ #define UNIPRO_DME_POWERMODE_REQ_REMOTEL2TIMER0	0x78B8
+ #define UNIPRO_DME_POWERMODE_REQ_REMOTEL2TIMER1	0x78BC
+ #define UNIPRO_DME_POWERMODE_REQ_REMOTEL2TIMER2	0x78C0
+ 
++static const struct exynos_ufs_drv_data exynos_ufs_drvs;
++
+ /*
+  * UFS Protector registers
+  */
+@@ -371,6 +380,26 @@ static int exynos7_ufs_post_link(struct exynos_ufs *ufs)
+ static int exynos7_ufs_pre_pwr_change(struct exynos_ufs *ufs,
+ 						struct ufs_pa_layer_attr *pwr)
+ {
++	struct ufs_hba *hba = ufs->hba;
++
++	/*
++	 * UFSHCD_QUIRK_SKIP_DEF_UNIPRO_TIMEOUT_SETTING skips core ufshcd's
++	 * PA_PWRMODEUSERDATA setup. Program both the remote PA user-data MIBs
++	 * and Exynos7's UNIPRO DME L2 timer registers (matching stock 3.10
++	 * ufs-exynos.c) so PACP_PWR_req after HCI/UNIPRO reset never sends
++	 * zeroed L2 timeouts (which abort PMC with upmcrs=0x5).
++	 */
++	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_PWRMODEUSERDATA0), 12000);
++	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_PWRMODEUSERDATA1), 32000);
++	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_PWRMODEUSERDATA2), 16000);
++
++	unipro_writel(ufs, 8064, UNIPRO_DME_PWR_REQ_LOCALL2TIMER0);
++	unipro_writel(ufs, 28224, UNIPRO_DME_PWR_REQ_LOCALL2TIMER1);
++	unipro_writel(ufs, 20160, UNIPRO_DME_PWR_REQ_LOCALL2TIMER2);
++	unipro_writel(ufs, 12000, UNIPRO_DME_PWR_REQ_REMOTEL2TIMER0);
++	unipro_writel(ufs, 32000, UNIPRO_DME_PWR_REQ_REMOTEL2TIMER1);
++	unipro_writel(ufs, 16000, UNIPRO_DME_PWR_REQ_REMOTEL2TIMER2);
++
+ 	unipro_writel(ufs, 0x22, UNIPRO_DBG_FORCE_DME_CTRL_STATE);
+ 
+ 	return 0;
+@@ -837,6 +866,14 @@ static int exynos_ufs_pre_pwr_mode(struct ufs_hba *hba,
+ 	}
+ 
+ 	ufshcd_init_pwr_dev_param(&ufs_exynos_cap);
++	if (ufs->drv_data == &exynos_ufs_drvs) {
++		/*
++		 * Exynos7/7420 combo M-PHY only carries HS-G2 equalizer/CDR
++		 * calibration tables (stock DT: ufs,pmd-attr-gear = <2>).
++		 */
++		ufs_exynos_cap.hs_rx_gear = UFS_HS_G2;
++		ufs_exynos_cap.hs_tx_gear = UFS_HS_G2;
++	}
+ 
+ 	ret = ufshcd_get_pwr_dev_param(&ufs_exynos_cap,
+ 				       dev_max_params, dev_req_params);
+@@ -853,7 +890,11 @@ static int exynos_ufs_pre_pwr_mode(struct ufs_hba *hba,
+ 
+ 		switch (dev_req_params->hs_rate) {
+ 		case PA_HS_MODE_A:
++			phy_set_mode(generic_phy, PHY_MODE_UFS_HS_A);
++			phy_calibrate(generic_phy);
++			break;
+ 		case PA_HS_MODE_B:
++			phy_set_mode(generic_phy, PHY_MODE_UFS_HS_B);
+ 			phy_calibrate(generic_phy);
+ 			break;
+ 		}
+@@ -1185,12 +1226,27 @@ static int exynos_ufs_parse_dt(struct device *dev, struct exynos_ufs *ufs)
+ 	ufs->pclk_avail_min = PCLK_AVAIL_MIN;
+ 	ufs->pclk_avail_max = PCLK_AVAIL_MAX;
+ 
+-	attr->rx_adv_fine_gran_sup_en = RX_ADV_FINE_GRAN_SUP_EN;
+-	attr->rx_adv_fine_gran_step = RX_ADV_FINE_GRAN_STEP_VAL;
+-	attr->rx_adv_min_actv_time_cap = RX_ADV_MIN_ACTV_TIME_CAP;
+-	attr->pa_granularity = PA_GRANULARITY_VAL;
+-	attr->pa_tactivate = PA_TACTIVATE_VAL;
+-	attr->pa_hibern8time = PA_HIBERN8TIME_VAL;
++	if (ufs->drv_data == &exynos_ufs_drvs) {
++		/*
++		 * Match Galaxy S6 / Exynos7420 M-PHY capabilities from stock
++		 * 3.10 exynos7420-zero_common.dtsi instead of ExynosAutoV9:
++		 * fine granularity disabled, PA_TActivate = 6 (600 us) so
++		 * hibern8 exit never races M-PHY wakeup (pa_err 0x80000010).
++		 */
++		attr->rx_adv_fine_gran_sup_en = 0;
++		attr->rx_min_actv_time_cap = 7;
++		attr->rx_hibern8_time_cap = 5;
++		attr->pa_granularity = 6;
++		attr->pa_tactivate = 6;
++		attr->pa_hibern8time = 20;
++	} else {
++		attr->rx_adv_fine_gran_sup_en = RX_ADV_FINE_GRAN_SUP_EN;
++		attr->rx_adv_fine_gran_step = RX_ADV_FINE_GRAN_STEP_VAL;
++		attr->rx_adv_min_actv_time_cap = RX_ADV_MIN_ACTV_TIME_CAP;
++		attr->pa_granularity = PA_GRANULARITY_VAL;
++		attr->pa_tactivate = PA_TACTIVATE_VAL;
++		attr->pa_hibern8time = PA_HIBERN8TIME_VAL;
++	}
+ 
+ out:
+ 	return ret;
+@@ -1308,8 +1364,9 @@ static void exynos_ufs_dev_hw_reset(struct ufs_hba *hba)
+ 	struct exynos_ufs *ufs = ufshcd_get_variant(hba);
+ 
+ 	hci_writel(ufs, 0 << 0, HCI_GPIO_OUT);
+-	udelay(5);
++	udelay(10);
+ 	hci_writel(ufs, 1 << 0, HCI_GPIO_OUT);
++	usleep_range(1000, 1500);
+ }
+ 
+ static void exynos_ufs_pre_hibern8(struct ufs_hba *hba, enum uic_cmd_dme cmd)

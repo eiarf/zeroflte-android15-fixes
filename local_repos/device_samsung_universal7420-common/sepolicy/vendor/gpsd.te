@@ -16,3 +16,7 @@ allow gpsd gps_data_file:fifo_file create_file_perms;
 dontaudit gpsd system_data_file:dir search;
 allow gpsd system_file:file r_file_perms;
 dontaudit gpsd radio_prop:file { read getattr map open };
+
+# Allow gpsd acquire_wake_lock() via AIDL ISystemSuspend and sensorservice binder calls
+wakelock_use(gpsd)
+binder_call(gpsd, system_server)

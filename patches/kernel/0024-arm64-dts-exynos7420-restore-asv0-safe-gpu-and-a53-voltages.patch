@@ -1,0 +1,144 @@
+diff --git a/arch/arm64/boot/dts/exynos/exynos7.dtsi b/arch/arm64/boot/dts/exynos/exynos7.dtsi
+index 405b3fcbb..2fa7eb4d2 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7.dtsi
++++ b/arch/arm64/boot/dts/exynos/exynos7.dtsi
+@@ -332,84 +332,84 @@ cpu_apollo_opp_table: opp-table-apollo {
+ 
+ 		opp-400000000 {
+ 			opp-hz = /bits/ 64 <400000000>;
+-			opp-microvolt = <675000>;
++			opp-microvolt = <768750>;
+ 			opp-microwatt = <25000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-500000000 {
+ 			opp-hz = /bits/ 64 <500000000>;
+-			opp-microvolt = <712500>;
++			opp-microvolt = <793750>;
+ 			opp-microwatt = <35000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-600000000 {
+ 			opp-hz = /bits/ 64 <600000000>;
+-			opp-microvolt = <750000>;
++			opp-microvolt = <818750>;
+ 			opp-microwatt = <43000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-700000000 {
+ 			opp-hz = /bits/ 64 <700000000>;
+-			opp-microvolt = <787500>;
++			opp-microvolt = <843750>;
+ 			opp-microwatt = <54000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-800000000 {
+ 			opp-hz = /bits/ 64 <800000000>;
+-			opp-microvolt = <825000>;
++			opp-microvolt = <875000>;
+ 			opp-microwatt = <66000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-900000000 {
+ 			opp-hz = /bits/ 64 <900000000>;
+-			opp-microvolt = <862500>;
++			opp-microvolt = <912500>;
+ 			opp-microwatt = <81000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1000000000 {
+ 			opp-hz = /bits/ 64 <1000000000>;
+-			opp-microvolt = <900000>;
++			opp-microvolt = <950000>;
+ 			opp-microwatt = <96000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1104000000 {
+ 			opp-hz = /bits/ 64 <1104000000>;
+-			opp-microvolt = <943750>;
++			opp-microvolt = <987500>;
+ 			opp-microwatt = <117000>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1200000000 {
+ 			opp-hz = /bits/ 64 <1200000000>;
+-			opp-microvolt = <981250>;
++			opp-microvolt = <1025000>;
+ 			opp-microwatt = <140250>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1296000000 {
+ 			opp-hz = /bits/ 64 <1296000000>;
+-			opp-microvolt = <1018750>;
++			opp-microvolt = <1062500>;
+ 			opp-microwatt = <166250>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1400000000 {
+ 			opp-hz = /bits/ 64 <1400000000>;
+-			opp-microvolt = <1068750>;
++			opp-microvolt = <1112500>;
+ 			opp-microwatt = <200250>;
+ 			clock-latency-ns = <500000>;
+ 		};
+ 
+ 		opp-1500000000 {
+ 			opp-hz = /bits/ 64 <1500000000>;
+-			opp-microvolt = <1118750>;
++			opp-microvolt = <1162500>;
+ 			opp-microwatt = <237250>;
+ 			clock-latency-ns = <500000>;
+ 		};
+diff --git a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+index 8dec3ff3e..4ccdd64e7 100644
+--- a/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
++++ b/arch/arm64/boot/dts/exynos/exynos7420-zeroflte.dts
+@@ -1263,32 +1263,32 @@ gpu_opp_table: opp-table {
+ 
+ 		opp-266000000 {
+ 			opp-hz = /bits/ 64 <266000000>;
+-			opp-microvolt = <750000>;
++			opp-microvolt = <762500>;
+ 		};
+ 
+ 		opp-350000000 {
+ 			opp-hz = /bits/ 64 <350000000>;
+-			opp-microvolt = <756250>;
++			opp-microvolt = <768750>;
+ 		};
+ 
+ 		opp-420000000 {
+ 			opp-hz = /bits/ 64 <420000000>;
+-			opp-microvolt = <762500>;
++			opp-microvolt = <775000>;
+ 		};
+ 
+ 		opp-544000000 {
+ 			opp-hz = /bits/ 64 <544000000>;
+-			opp-microvolt = <800000>;
++			opp-microvolt = <812500>;
+ 		};
+ 
+ 		opp-600000000 {
+ 			opp-hz = /bits/ 64 <600000000>;
+-			opp-microvolt = <837500>;
++			opp-microvolt = <850000>;
+ 		};
+ 
+ 		opp-700000000 {
+ 			opp-hz = /bits/ 64 <700000000>;
+-			opp-microvolt = <881250>;
++			opp-microvolt = <893750>;
+ 		};
+ 	};
+ };
